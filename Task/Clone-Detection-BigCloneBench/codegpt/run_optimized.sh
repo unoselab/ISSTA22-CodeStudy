@@ -54,10 +54,12 @@ accelerate launch --multi_gpu --num_processes 2 run.py \
     --eval_data_file=../dataset/valid.txt \
     --test_data_file=../dataset/test.txt \
     --block_size 1024 \
-    --train_batch_size 32 \
-    --eval_batch_size 64 \
+    --train_batch_size 16 \
+    --gradient_accumulation_steps 2 \
+    --eval_batch_size 32 \
     --epoch 5 \
     --learning_rate 2e-5 \
     --max_grad_norm 1.0 \
     --evaluate_during_training \
+    --fp16 \
     --seed 3 2>&1 | tee ./saved_models/train_optimized.log
