@@ -42,7 +42,7 @@ mkdir -p ./saved_models/
 # 3. Batch Size (--train_batch_size): Set to 32 per GPU (64 global) to maximize Tensor Core usage on RTX 6000 Ada.
 # 4. Epochs (--epoch): Increased to 5 to ensure convergence since the larger batch size results in fewer weight updates per epoch.
 
-accelerate launch --multi_gpu --num_processes 2 run.py \
+accelerate launch --multi_gpu --num_processes 2 --mixed_precision=fp16 run.py \
     --output_dir=./saved_models/ \
     --model_type=gpt2 \
     --config_name=microsoft/CodeGPT-small-java-adaptedGPT2 \
@@ -61,5 +61,4 @@ accelerate launch --multi_gpu --num_processes 2 run.py \
     --learning_rate 2e-5 \
     --max_grad_norm 1.0 \
     --evaluate_during_training \
-    --fp16 \
     --seed 3 2>&1 | tee ./saved_models/train_optimized.log
