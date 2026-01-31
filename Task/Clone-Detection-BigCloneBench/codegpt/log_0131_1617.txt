@@ -1,0 +1,75 @@
+nohup: ignoring input
+The following values were not passed to `accelerate launch` and had defaults used instead:
+	`--num_machines` was set to a value of `1`
+	`--mixed_precision` was set to a value of `'no'`
+	`--dynamo_backend` was set to a value of `'no'`
+To avoid this warning pass in values for each of the problematic parameters or run `accelerate config`.
+Traceback (most recent call last):
+  File "/home/user1-system12/project-workspace/llm-clone/Task/Clone-Detection-BigCloneBench/codegpt/run.py", line 39, in <module>
+    from torch.utils.tensorboard import SummaryWriter
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/torch/utils/tensorboard/__init__.py", line 1, in <module>
+    import tensorboard
+ModuleNotFoundError: No module named 'tensorboard'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/user1-system12/project-workspace/llm-clone/Task/Clone-Detection-BigCloneBench/codegpt/run.py", line 41, in <module>
+    from tensorboardX import SummaryWriter
+ModuleNotFoundError: No module named 'tensorboardX'
+Traceback (most recent call last):
+  File "/home/user1-system12/project-workspace/llm-clone/Task/Clone-Detection-BigCloneBench/codegpt/run.py", line 39, in <module>
+    from torch.utils.tensorboard import SummaryWriter
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/torch/utils/tensorboard/__init__.py", line 1, in <module>
+    import tensorboard
+ModuleNotFoundError: No module named 'tensorboard'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/user1-system12/project-workspace/llm-clone/Task/Clone-Detection-BigCloneBench/codegpt/run.py", line 41, in <module>
+    from tensorboardX import SummaryWriter
+ModuleNotFoundError: No module named 'tensorboardX'
+E0131 16:17:44.633000 89541 site-packages/torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: 1) local_rank: 0 (pid: 89645) of binary: /home/user1-system12/miniconda3/envs/bigclone/bin/python3.11
+Traceback (most recent call last):
+  File "/home/user1-system12/miniconda3/envs/bigclone/bin/accelerate", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/accelerate/commands/accelerate_cli.py", line 50, in main
+    args.func(args)
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/accelerate/commands/launch.py", line 1272, in launch_command
+    multi_gpu_launcher(args)
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/accelerate/commands/launch.py", line 899, in multi_gpu_launcher
+    distrib_run.run(args)
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/torch/distributed/run.py", line 910, in run
+    elastic_launch(
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user1-system12/miniconda3/envs/bigclone/lib/python3.11/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+run.py FAILED
+------------------------------------------------------------
+Failures:
+[1]:
+  time      : 2026-01-31_16:17:44
+  host      : OISSE-IST173C01.unomaha.edu
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 89646)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-01-31_16:17:44
+  host      : OISSE-IST173C01.unomaha.edu
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 89645)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
+run_optimized.sh: line 53: --block_size: command not found
+run_optimized.sh: line 56: --train_batch_size: command not found
+run_optimized.sh: line 60: --epoch: command not found
