@@ -468,7 +468,7 @@ def train(args, train_dataset, model, tokenizer,pool):
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     
-                    if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
+                    if args.local_rank in [-1, 0] and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer,pool=pool,eval_when_training=True)                 
                         # Save model checkpoint
 
@@ -729,6 +729,8 @@ def main():
     
     pool = multiprocessing.Pool(cpu_cont)
     args = parser.parse_args()
+    if args.local_rank == -1 and 'LOCAL_RANK' in os.environ:
+        args.local_rank = int(os.environ['LOCAL_RANK'])
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
