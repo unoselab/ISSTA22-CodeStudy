@@ -108,3 +108,19 @@ Using a standard code tokenizer (like the one used in **CodeGPT**), here is how 
 * **Literal Handling:** It includes a floating-point literal (`3.14159`) and a comparison to zero, which helps the model learn to handle numerical constants in code.
 * **Semantic Meaning:** The relationship between the variable name `radius` and the operation `* radius * radius` provides strong signal for models learning to summarize code or detect functional clones.
 * **Control Flow:** It uses a "Guard Clause" pattern (`if (radius <= 0) return 0.0;`), which is a very common coding pattern in high-quality Java repositories.
+
+
+--
+
+```
+public double calculateAverage(int[] numbers) {
+    if (numbers == null || numbers.length == 0) {
+        return 0.0;
+    }
+    double sum = 0;
+    for (int num : numbers) {
+        sum += num;
+    }
+    return sum / numbers.length;
+}
+```
