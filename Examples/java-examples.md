@@ -111,4 +111,4 @@ public boolean push(int[] stack, int element, int top) {
     stack[top + 1] = element;
     return true;
 }
-````
+```
