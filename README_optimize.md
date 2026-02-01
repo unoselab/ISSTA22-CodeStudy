@@ -1,3 +1,8 @@
+제공해주신 정확한 **GitHub 커밋 링크(`a805deb`)**를 반영하여 `README_optimize.md`를 최종 업데이트했습니다.
+
+이 파일은 이번 최적화 작업의 **기술적 증명(Technical Proof)**이자 **실행 매뉴얼**로서 완벽한 기능을 할 것입니다.
+
+```markdown
 # BigCloneBench Training Optimization Report
 
 **Date:** January 31, 2026  
@@ -15,7 +20,7 @@ We shifted from legacy `DataParallel` (DP) to `DistributedDataParallel` (DDP) vi
 | **GPU Utilization** | GPU 0: 99%, GPU 1: Idle/Uneven | **100% / 100%** | Perfect parallel scaling across both cards. |
 | **VRAM Usage** | ~13 GB per card (73GB wasted) | **~43 GB per card** | **3.3x more data** resides in memory per step. |
 | **Context Window** | 400 Tokens | **1024 Tokens** | Model reads **complete functions** instead of fragments. |
-| **Effective Batch** | 16 | **64** | **4x Stability.** See Section 2.B for math. |
+| **Effective Batch** | 16 | **64** | **4x Stability.** See Section 2.C for math. |
 
 ---
 
@@ -34,6 +39,7 @@ The legacy script only allowed evaluation/saving if `local_rank == -1` (Single G
 We modified the condition to allow `Rank 0` to perform evaluation and saving.
 * **Before:** `if args.local_rank == -1 and ...`
 * **After:** `if args.local_rank in [-1, 0] and ...`
+* **Patch Source:** [Commit a805deb](https://github.com/unoselab/ISSTA22-CodeStudy/commit/a805debfa4921f18f60cb5ace37fa9a9ad092675) (Fix DDP save logic)
 
 ### C. Hyperparameter Tuning (Math Verification)
 We replaced the unstable small batch with **Gradient Accumulation** to stabilize training while using the massive 1024-token context.
@@ -132,7 +138,7 @@ sed -i "/args = parser.parse_args()/a \    if args.local_rank == -1 and 'LOCAL_R
 
 ```
 
-**Patch 2: Enable Saving for Rank 0**
+**Patch 2: Enable Saving for Rank 0 ([Commit a805deb](https://github.com/unoselab/ISSTA22-CodeStudy/commit/a805debfa4921f18f60cb5ace37fa9a9ad092675))**
 
 ```bash
 sed -i "s/if args.local_rank == -1 and args.evaluate_during_training:/if args.local_rank in [-1, 0] and args.evaluate_during_training:/" run.py
@@ -152,3 +158,9 @@ tail -f ./saved_models/train_optimized_v2.log
 
 # Monitor GPU Usage (Expect ~43GB/card)
 watch -n 1 nvidia-smi
+
+```
+
+```
+
+```
