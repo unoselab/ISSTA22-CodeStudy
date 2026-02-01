@@ -84,7 +84,7 @@ public double calculateAverage(int[] numbers) {
 
 ### Exemplary Java Function (50 - 60 Tokens)
 
-````java
+```java
 public int linearSearch(int[] array, int target) {
     if (array == null || array.length == 0) {
         return -1;
