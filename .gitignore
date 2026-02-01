@@ -19,9 +19,14 @@ checkpoint-*/
 
 # --- Datasets ---
 dataset/
+Examples/nicad-*
+FCDetector/target/
 *.zip
 *.tar.gz
+
 
 # --- IDE Settings ---
 .vscode/
 .idea/
+FCDetector/.classpath
+FCDetector/.project
