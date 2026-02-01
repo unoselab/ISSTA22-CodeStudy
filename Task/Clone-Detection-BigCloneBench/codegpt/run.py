@@ -190,9 +190,9 @@ def train(args, train_dataset, model, tokenizer,pool):
     
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
     args.max_steps=args.epoch*len( train_dataloader)
-    # # args.save_steps=len( train_dataloader)
+    # # # args.save_steps=len( train_dataloader)
     args.warmup_steps=len( train_dataloader)
-    # # args.logging_steps=len( train_dataloader)
+    # # # args.logging_steps=len( train_dataloader)
     args.num_train_epochs=args.epoch
     model.to(args.device)
     # Prepare optimizer and schedule (linear warmup and decay)
@@ -292,14 +292,14 @@ def train(args, train_dataset, model, tokenizer,pool):
                     logging_loss = tr_loss
                     tr_nb=global_step
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if args.save_steps > 0 and global_step % args.save_steps == 0:
                     
                     # if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
-                    if args.local_rank in [-1, 0] and args.evaluate_during_training: # Multi GPU
+                    if args.evaluate_during_training: # Multi GPU
                         results = evaluate(args, model, tokenizer,pool=pool,eval_when_training=True)                 
                         # Save model checkpoint
 
-                    if results['eval_f1']>best_f1:
+                    if args.local_rank in [-1, 0] and results['eval_f1']>best_f1:
                         best_f1=results['eval_f1']
                         logger.info("  "+"*"*20)  
                         logger.info("  Best f1:%s",round(best_f1,4))
