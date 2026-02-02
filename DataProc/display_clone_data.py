@@ -58,7 +58,7 @@ def plot_clone_distribution(file_path):
                      f'{int(height)}', ha='center', va='bottom')
 
         # 이미지 파일로 저장
-        output_file = 'clone_distribution.png'
+        output_file = 'clone_distribution_clone_func.png'
         plt.savefig(output_file)
         print(f"\nGraph saved to: {output_file}")
         print("Done.")
