@@ -31,6 +31,37 @@ TEST_FILENAME_PATTERNS = [
 TEST_DIR_RES = [re.compile(p) for p in TEST_DIR_PATTERNS]
 TEST_FILE_RES = [re.compile(p) for p in TEST_FILENAME_PATTERNS]
 
+# ---- Comment Stripping Regex ----
+# This pattern matches:
+# 1. Line comments (//...)
+# 2. Block comments (/*...*/)
+# 3. Strings ("..." or '...') -> to ignore slashes inside strings
+JAVA_COMMENT_PATTERN = re.compile(
+    r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"',
+    re.DOTALL | re.MULTILINE
+)
+
+def remove_java_comments(text: str) -> str:
+    """
+    Remove Java block comments and line comments while preserving string literals.
+    """
+    def replacer(match):
+        s = match.group(0)
+        if s.startswith('/'):
+            return " "  # Replace comment with a single space
+        else:
+            return s  # Return string literal as is
+            
+    return JAVA_COMMENT_PATTERN.sub(replacer, text)
+
+def process_group_comments(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Iterate over all sources in the clone group and strip comments from the code.
+    """
+    for src in obj.get("sources", []):
+        if "code" in src:
+            src["code"] = remove_java_comments(src["code"])
+    return obj
 
 def is_test_path(path: str) -> bool:
     """Check if the file path matches any test directory or filename patterns."""
@@ -44,7 +75,6 @@ def is_test_path(path: str) -> bool:
             return True
     return False
 
-
 def group_has_any_test_source(obj: Dict[str, Any]) -> bool:
     """Return True if any source within the group is identified as a test file."""
     for s in obj.get("sources", []):
@@ -52,10 +82,9 @@ def group_has_any_test_source(obj: Dict[str, Any]) -> bool:
             return True
     return False
 
-
 def main():
     ap = argparse.ArgumentParser(
-        description="Filter out test functions and limit clone group size from a NiCad clone JSONL file."
+        description="Filter out test functions, limit clone group size, and strip comments from a NiCad clone JSONL file."
     )
     # Set default values to allow execution without explicit command line arguments
     ap.add_argument("--input", default=DEFAULT_INPUT, help=f"Input JSONL file (default: {DEFAULT_INPUT})")
@@ -73,6 +102,13 @@ def main():
         default=20,
         help="Discard groups where nclones is equal to or greater than this value (default: 20)."
     )
+    # Option to disable comment stripping if needed
+    ap.add_argument(
+        "--keep_comments",
+        action="store_true",
+        help="If set, comments will NOT be removed from the source code."
+    )
+
     args = ap.parse_args()
 
     in_path = args.input
@@ -85,6 +121,11 @@ def main():
 
     if not os.path.exists(os.path.dirname(out_path)) and os.path.dirname(out_path) != "":
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    print(f"Reading from: {in_path}")
+    print(f"Writing to:   {out_path}")
+    if not args.keep_comments:
+        print("Feature:      Java Comment Stripping ENABLED (Optimization)")
 
     with open(in_path, "r", encoding="utf-8") as fin, open(out_path, "w", encoding="utf-8") as fout:
         for line_no, line in enumerate(fin, 1):
@@ -107,13 +148,26 @@ def main():
                 continue
 
             # ---- TEST FILTERING LOGIC ----
+            # We determine whether to keep the group based on test files.
+            should_write = False
+            
             if args.mode == "drop_group_if_any_test":
                 if group_has_any_test_source(obj):
                     dropped_groups_test += 1
                     continue
+                should_write = True
+            
+            # (If needed, other modes like 'drop_only_test_sources' can be handled here)
+
+            # ---- FINAL PROCESSING & WRITING ----
+            if should_write:
+                # OPTIMIZATION: Strip Comments
+                # Unless the user explicitly requested to keep them, we remove comments to save token space.
+                if not args.keep_comments:
+                    obj = process_group_comments(obj)
+
                 fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
                 kept_groups += 1
-            # (Note: Additional modes like 'drop_only_test_sources' can be added here if needed)
 
     print("--- Processing Complete ---")
     print(f"  Input groups:           {total_groups}")
