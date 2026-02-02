@@ -19,7 +19,7 @@ checkpoint-*/
 
 # --- Datasets ---
 dataset/
-Examples/nicad-*
+DataProc/nicad-*
 FCDetector/target/
 *.zip
 *.tar.gz
