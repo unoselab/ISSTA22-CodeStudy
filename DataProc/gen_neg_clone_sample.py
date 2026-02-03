@@ -4,14 +4,15 @@ import sys
 import os
 import html
 
-# 기본 설정 (Default Configuration)
-DEFAULT_INPUT = "data/nicad_camel_clone_func_small.jsonl"
-OUTPUT_JSONL = "data/negative_samples.jsonl"
+# Configurations
+DEFAULT_INPUT = "data/nicad_camel_clone_data_small.jsonl" # Input with func_id
+OUTPUT_JSONL = "data/nicad_camel_neg_samples.jsonl"       # Consistent naming
 OUTPUT_HTML = "display_neg_sample.html"
+OUTPUT_TXT = "data/nicad_camel_neg_samples.txt"           # TXT format output
 
 def generate_html_report(pairs, output_file=OUTPUT_HTML):
     """
-    Generates an HTML report to visualize the generated negative pairs side-by-side.
+    Generates an HTML report to visualize the generated negative pairs.
     """
     html_content = [
         "<html><head><style>",
@@ -20,7 +21,7 @@ def generate_html_report(pairs, output_file=OUTPUT_HTML):
         ".pair-container { background: white; border: 1px solid #ddd; margin-bottom: 30px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }",
         ".pair-header { font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #eee; color: #555; }",
         ".code-row { display: flex; gap: 20px; }",
-        ".code-col { flex: 1; min-width: 0; }", # min-width: 0 forces flex items to shrink
+        ".code-col { flex: 1; min-width: 0; }",
         ".meta-info { font-size: 0.85em; color: #666; margin-bottom: 5px; background: #f0f0f0; padding: 5px; border-radius: 4px; }",
         "pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow-x: auto; font-size: 0.8em; font-family: Consolas, monospace; height: 300px; }",
         ".label-badge { background-color: #e74c3c; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; vertical-align: middle; }",
@@ -34,11 +35,10 @@ def generate_html_report(pairs, output_file=OUTPUT_HTML):
         f2 = pair['func2']
         meta = pair['meta']
 
-        # Meta info strings
-        info1 = f"<b>ClassID:</b> {meta['classid1']}<br><b>File:</b> {f1.get('file', 'N/A')}<br><b>Name:</b> {html.escape(f1.get('qualified_name', 'Unknown'))}"
-        info2 = f"<b>ClassID:</b> {meta['classid2']}<br><b>File:</b> {f2.get('file', 'N/A')}<br><b>Name:</b> {html.escape(f2.get('qualified_name', 'Unknown'))}"
+        # Include func_id in the HTML display
+        info1 = f"<b>ID:</b> {f1.get('func_id', 'N/A')}<br><b>ClassID:</b> {meta['classid1']}<br><b>File:</b> {f1.get('file', 'N/A')}<br><b>Name:</b> {html.escape(f1.get('qualified_name', 'Unknown'))}"
+        info2 = f"<b>ID:</b> {f2.get('func_id', 'N/A')}<br><b>ClassID:</b> {meta['classid2']}<br><b>File:</b> {f2.get('file', 'N/A')}<br><b>Name:</b> {html.escape(f2.get('qualified_name', 'Unknown'))}"
 
-        # Code content
         code1 = html.escape(f1.get('code', ''))
         code2 = html.escape(f2.get('code', ''))
 
@@ -66,9 +66,10 @@ def generate_html_report(pairs, output_file=OUTPUT_HTML):
         f.write("\n".join(html_content))
     print(f"HTML report generated: {output_file}")
 
-def generate_negative_samples(input_file, output_jsonl):
+def generate_negative_samples(input_file, output_jsonl, output_txt):
     if not os.path.exists(input_file):
         print(f"Error: Input file '{input_file}' not found.")
+        print("Tip: Make sure to run 'gen_init_train_sample.py' first to generate IDs.")
         return
 
     print(f"--- Loading data from: {input_file} ---")
@@ -94,7 +95,7 @@ def generate_negative_samples(input_file, output_jsonl):
                         
                     groups[class_id] = sources
                     
-                    # Calculate potential positive pairs (nC2) for reference
+                    # Calculate potential positive pairs (nC2) for this group
                     n = len(sources)
                     if n > 1:
                         total_positive_pairs += (n * (n - 1)) // 2
@@ -108,21 +109,54 @@ def generate_negative_samples(input_file, output_jsonl):
         print(f"Error reading file: {e}")
         return
 
-    print(f"Loaded {len(groups)} groups.")
+    # --- Detailed Calculation Logic ---
+    total_funcs = len(flat_funcs)
+    
+    # Total possible pairs in the entire dataset (Combinations: N choose 2)
+    # This represents the "Universe" of all possible pairs
+    total_possible_combinations = (total_funcs * (total_funcs - 1)) // 2 if total_funcs > 1 else 0
+    
+    # Max Negative = Total Combinations - Max Positive
+    max_negative_pairs = total_possible_combinations - total_positive_pairs
+
+    print(f"Loaded {len(groups)} groups with {total_funcs} total functions.")
+    
+    print(f"\n=== Detailed Calculation of Dataset Capacity ===")
+    print(f"1. Total Functions (N): {total_funcs}")
+    print(f"   - We have {total_funcs} unique functions in the dataset.")
+    print(f"   - Total possible pairs (Universe) = N * (N - 1) / 2")
+    print(f"   - {total_funcs} * {total_funcs - 1} / 2 = {total_possible_combinations:,} pairs")
+
+    print(f"\n2. Max Possible Positive Samples (Clones): {total_positive_pairs:,}")
+    print(f"   - Calculation: Sum of pairs within each clone group.")
+    print(f"   - Formula: Sum( size * (size - 1) / 2 ) for all groups.")
+    print(f"   - This represents all pairs where Label = 1.")
+
+    print(f"\n3. Max Possible Negative Samples (Non-Clones): {max_negative_pairs:,}")
+    print(f"   - Calculation: Universe - Positives")
+    print(f"   - Formula: {total_possible_combinations:,} - {total_positive_pairs:,} = {max_negative_pairs:,}")
+    print(f"   - This represents all pairs where Label = 0.")
+    print(f"================================================\n")
     
     if len(groups) < 2:
         print("Error: Need at least 2 clone groups to generate negative samples.")
         return
 
     # 2. Generate Negative Pairs
-    # Target: Match the number of positive pairs (or at least 10 for small data)
+    # Target: Match the number of positive pairs (Balanced)
     target_neg_count = total_positive_pairs if total_positive_pairs > 0 else 10
-    print(f"--- Generating {target_neg_count} Negative Samples ---")
+    
+    if target_neg_count > max_negative_pairs:
+        print(f"Warning: Target {target_neg_count} exceeds max possible negatives. Adjusting to {max_negative_pairs}.")
+        target_neg_count = max_negative_pairs
+
+    print(f"--- Generating {target_neg_count} Negative Samples (Balanced) ---")
     
     generated_pairs_list = []
     seen_pairs = set()
     attempts = 0
-    max_attempts = target_neg_count * 20 
+    # Increase attempt limit significantly
+    max_attempts = target_neg_count * 50 
     
     while len(generated_pairs_list) < target_neg_count and attempts < max_attempts:
         attempts += 1
@@ -136,12 +170,10 @@ def generate_negative_samples(input_file, output_jsonl):
         
         # Must be from different groups
         if id1 != id2:
-            # Create a unique key to avoid duplicates
-            # Use qualified_name + range or code snippet hash as key
-            k1 = data1.get("qualified_name", "") + str(data1.get("range", ""))
-            k2 = data2.get("qualified_name", "") + str(data2.get("range", ""))
+            # Create key to avoid duplicates
+            k1 = data1.get("func_id") or (data1.get("qualified_name", "") + str(data1.get("range", "")))
+            k2 = data2.get("func_id") or (data2.get("qualified_name", "") + str(data2.get("range", "")))
             
-            # Sort keys to treat (A, B) same as (B, A)
             pair_key = tuple(sorted((k1, k2)))
             
             if pair_key not in seen_pairs:
@@ -160,7 +192,7 @@ def generate_negative_samples(input_file, output_jsonl):
 
     print(f"Done. Generated {len(generated_pairs_list)} unique negative pairs.")
 
-    # 3. Save to JSONL
+    # 3. Save to JSONL (for record/HTML)
     try:
         with open(output_jsonl, 'w', encoding='utf-8') as out_f:
             for p in generated_pairs_list:
@@ -169,14 +201,32 @@ def generate_negative_samples(input_file, output_jsonl):
     except Exception as e:
         print(f"Error writing JSONL: {e}")
 
-    # 4. Generate HTML Report
+    # 4. Save to TXT (Training Format: id1 [tab] id2 [tab] 0)
+    try:
+        with open(output_txt, 'w', encoding='utf-8') as txt_f:
+            count = 0
+            for p in generated_pairs_list:
+                fid1 = p['func1'].get('func_id')
+                fid2 = p['func2'].get('func_id')
+                
+                if fid1 and fid2:
+                    txt_f.write(f"{fid1}\t{fid2}\t0\n")
+                    count += 1
+                else:
+                    if count == 0: 
+                        print("Warning: 'func_id' not found in data. Make sure you ran gen_init_train_sample.py first.")
+        print(f"TXT saved to: {output_txt} ({count} lines)")
+    except Exception as e:
+        print(f"Error writing TXT: {e}")
+
+    # 5. Generate HTML Report
     generate_html_report(generated_pairs_list)
 
 if __name__ == "__main__":
     input_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INPUT
     
-    # Remove old files if exist
-    if os.path.exists(OUTPUT_JSONL): os.remove(OUTPUT_JSONL)
-    if os.path.exists(OUTPUT_HTML): os.remove(OUTPUT_HTML)
+    # Cleanup old output
+    for f in [OUTPUT_JSONL, OUTPUT_HTML, OUTPUT_TXT]:
+        if os.path.exists(f): os.remove(f)
         
-    generate_negative_samples(input_path, OUTPUT_JSONL)
+    generate_negative_samples(input_path, OUTPUT_JSONL, OUTPUT_TXT)

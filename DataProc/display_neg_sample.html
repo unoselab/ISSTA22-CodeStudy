@@ -18,90 +18,7 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
             </div>
             <div class="code-row">
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.onInvalidateAll(Message message)</div>
-                    <pre>    public void onInvalidateAll(Message message) {
-
-        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
-         
-        if (keys == null) {
-            cache.invalidateAll();
-        } else {
-            cache.invalidateAll(keys);
-        }
-
-        setResult(message, true, null, null);
-    }</pre>
-                </div>
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheEndpoint.doStart()</div>
-                    <pre>    protected void doStart() throws Exception {
-        super.doStart();
-        cache = CamelContextHelper.lookup(getCamelContext(), cacheName, LoadingCache.class);
-        if (cache == null) {
-            if (configuration.isCreateCacheIfNotExist()) {
-                cache = getComponent().getOrCreateCache(cacheName, configuration);
-            } else {
-                throw new IllegalArgumentException(
-                        &quot;LoadingCache instance &#x27;&quot; + cacheName + &quot;&#x27; not found and createCacheIfNotExist is set to false&quot;);
-            }
-        }
-    }</pre>
-                </div>
-            </div>
-        </div>
-        
-
-        <div class="pair-container">
-            <div class="pair-header">
-                Pair #2 <span class="label-badge">Negative (Non-Clone)</span>
-            </div>
-            <div class="code-row">
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-ehcache/src/main/java/org/apache/camel/component/ehcache/EhcacheProducer.java<br><b>Name:</b> org.apache.camel.component.ehcache.EhcacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
-                    <pre>    private void setResult(Message message, boolean success, Object result, Object oldValue) {
-        message.setHeader(EhcacheConstants.ACTION_SUCCEEDED, success);
-        message.setHeader(EhcacheConstants.ACTION_HAS_RESULT, oldValue != null || result != null);
-
-        if (oldValue != null) {
-            message.setHeader(EhcacheConstants.OLD_VALUE, oldValue);
-        }
-        if (result != null) {
-            message.setBody(result);
-        }
-    }</pre>
-                </div>
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 12<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.getValue(final Message message, final String type)</div>
-                    <pre>    private Object getValue(final Message message, final String type) throws Exception {
-        Object value = message.getHeader(CaffeineConstants.VALUE);
-        if (value == null) {
-            if (type != null) {
-                Class&lt;?&gt; clazz = getEndpoint().getCamelContext().getClassResolver().resolveClass(type);
-                value = message.getBody(clazz);
-            } else {
-                value = message.getBody();
-            }
-        }
-
-        if (value == null) {
-            throw new CamelExchangeException(
-                    &quot;No value provided in header or body (&quot; + CaffeineConstants.VALUE + &quot;)&quot;, message.getExchange());
-        }
-
-        return value;
-    }</pre>
-                </div>
-            </div>
-        </div>
-        
-
-        <div class="pair-container">
-            <div class="pair-header">
-                Pair #3 <span class="label-badge">Negative (Non-Clone)</span>
-            </div>
-            <div class="code-row">
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
+                    <div class="meta-info"><b>ID:</b> 13_9<br><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
                     <pre>    private void setResult(Message message, boolean success, Object result, Object oldValue) {
         message.setHeader(CaffeineConstants.ACTION_SUCCEEDED, success);
         message.setHeader(CaffeineConstants.ACTION_HAS_RESULT, oldValue != null || result != null);
@@ -115,7 +32,81 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
     }</pre>
                 </div>
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.onInvalidateAll(Message message)</div>
+                    <div class="meta-info"><b>ID:</b> 10_2<br><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.onInvalidateAll(Message message)</div>
+                    <pre>    public void onInvalidateAll(Message message) {
+        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
+         
+        if (keys == null) {
+            cache.invalidateAll();
+        } else {
+            cache.invalidateAll(keys);
+        }
+
+        setResult(message, true, null, null);
+    }</pre>
+                </div>
+            </div>
+        </div>
+        
+
+        <div class="pair-container">
+            <div class="pair-header">
+                Pair #2 <span class="label-badge">Negative (Non-Clone)</span>
+            </div>
+            <div class="code-row">
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 9_1<br><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheEndpoint.doStart()</div>
+                    <pre>    protected void doStart() throws Exception {
+        super.doStart();
+        cache = CamelContextHelper.lookup(getCamelContext(), cacheName, Cache.class);
+        if (cache == null) {
+            if (configuration.isCreateCacheIfNotExist()) {
+                cache = getComponent().getOrCreateCache(cacheName, configuration);
+            } else {
+                throw new IllegalArgumentException(
+                        &quot;Cache instance &#x27;&quot; + cacheName + &quot;&#x27; not found and createCacheIfNotExist is set to false&quot;);
+            }
+        }
+    }</pre>
+                </div>
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 13_11<br><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
+                    <pre>    private void setResult(Message message, boolean success, Object result, Object oldValue) {
+        message.setHeader(CaffeineConstants.ACTION_SUCCEEDED, success);
+        message.setHeader(CaffeineConstants.ACTION_HAS_RESULT, oldValue != null || result != null);
+
+        if (oldValue != null) {
+            message.setHeader(CaffeineConstants.OLD_VALUE, oldValue);
+        }
+        if (result != null) {
+            message.setBody(result);
+        }
+    }</pre>
+                </div>
+            </div>
+        </div>
+        
+
+        <div class="pair-container">
+            <div class="pair-header">
+                Pair #3 <span class="label-badge">Negative (Non-Clone)</span>
+            </div>
+            <div class="code-row">
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 11_6<br><b>ClassID:</b> 11<br><b>File:</b> systems/camel-java/components/camel-xmlsecurity/src/main/java/org/apache/camel/component/xmlsecurity/api/DefaultXmlSignature2Message.java<br><b>Name:</b> org.apache.camel.component.xmlsecurity.api.DefaultXmlSignature2Message.omitXmlDeclaration(Message message, Input input)</div>
+                    <pre>    protected Boolean omitXmlDeclaration(Message message, Input input) {
+        Boolean omitXmlDeclaration = message.getHeader(XmlSignatureConstants.HEADER_OMIT_XML_DECLARATION, Boolean.class);
+        if (omitXmlDeclaration == null) {
+            omitXmlDeclaration = input.omitXmlDeclaration();
+        }
+        if (omitXmlDeclaration == null) {
+            omitXmlDeclaration = Boolean.FALSE;
+        }
+        return omitXmlDeclaration;
+    }</pre>
+                </div>
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 10_2<br><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.onInvalidateAll(Message message)</div>
                     <pre>    public void onInvalidateAll(Message message) {
         Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
          
@@ -138,21 +129,7 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
             </div>
             <div class="code-row">
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.onInvalidateAll(Message message)</div>
-                    <pre>    public void onInvalidateAll(Message message) {
-        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
-         
-        if (keys == null) {
-            cache.invalidateAll();
-        } else {
-            cache.invalidateAll(keys);
-        }
-
-        setResult(message, true, null, null);
-    }</pre>
-                </div>
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheEndpoint.doStart()</div>
+                    <div class="meta-info"><b>ID:</b> 9_1<br><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheEndpoint.doStart()</div>
                     <pre>    protected void doStart() throws Exception {
         super.doStart();
         cache = CamelContextHelper.lookup(getCamelContext(), cacheName, Cache.class);
@@ -166,77 +143,8 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
         }
     }</pre>
                 </div>
-            </div>
-        </div>
-        
-
-        <div class="pair-container">
-            <div class="pair-header">
-                Pair #5 <span class="label-badge">Negative (Non-Clone)</span>
-            </div>
-            <div class="code-row">
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 12<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.getValue(final Message message, final String type)</div>
-                    <pre>    private Object getValue(final Message message, final String type) throws Exception {
-        Object value = message.getHeader(CaffeineConstants.VALUE);
-        if (value == null) {
-            if (type != null) {
-                Class&lt;?&gt; clazz = getEndpoint().getCamelContext().getClassResolver().resolveClass(type);
-                value = message.getBody(clazz);
-            } else {
-                value = message.getBody();
-            }
-        }
-
-        if (value == null) {
-            throw new CamelExchangeException(
-                    &quot;No value provided in header or body (&quot; + CaffeineConstants.VALUE + &quot;)&quot;, message.getExchange());
-        }
-
-        return value;
-    }</pre>
-                </div>
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheEndpoint.doStart()</div>
-                    <pre>    protected void doStart() throws Exception {
-        super.doStart();
-        cache = CamelContextHelper.lookup(getCamelContext(), cacheName, Cache.class);
-        if (cache == null) {
-            if (configuration.isCreateCacheIfNotExist()) {
-                cache = getComponent().getOrCreateCache(cacheName, configuration);
-            } else {
-                throw new IllegalArgumentException(
-                        &quot;Cache instance &#x27;&quot; + cacheName + &quot;&#x27; not found and createCacheIfNotExist is set to false&quot;);
-            }
-        }
-    }</pre>
-                </div>
-            </div>
-        </div>
-        
-
-        <div class="pair-container">
-            <div class="pair-header">
-                Pair #6 <span class="label-badge">Negative (Non-Clone)</span>
-            </div>
-            <div class="code-row">
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.onInvalidateAll(Message message)</div>
-                    <pre>    public void onInvalidateAll(Message message) {
-
-        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
-         
-        if (keys == null) {
-            cache.invalidateAll();
-        } else {
-            cache.invalidateAll(keys);
-        }
-
-        setResult(message, true, null, null);
-    }</pre>
-                </div>
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 11<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.getKey(final Message message)</div>
+                    <div class="meta-info"><b>ID:</b> 11_4<br><b>ClassID:</b> 11<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.getKey(final Message message)</div>
                     <pre>    private Object getKey(final Message message) throws Exception {
         String value = message.getHeader(CaffeineConstants.KEY, String.class);
         if (value == null) {
@@ -257,49 +165,11 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
 
         <div class="pair-container">
             <div class="pair-header">
-                Pair #7 <span class="label-badge">Negative (Non-Clone)</span>
+                Pair #5 <span class="label-badge">Negative (Non-Clone)</span>
             </div>
             <div class="code-row">
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
-                    <pre>    private void setResult(Message message, boolean success, Object result, Object oldValue) {
-        message.setHeader(CaffeineConstants.ACTION_SUCCEEDED, success);
-        message.setHeader(CaffeineConstants.ACTION_HAS_RESULT, oldValue != null || result != null);
-
-        if (oldValue != null) {
-            message.setHeader(CaffeineConstants.OLD_VALUE, oldValue);
-        }
-        if (result != null) {
-            message.setBody(result);
-        }
-    }</pre>
-                </div>
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheEndpoint.doStart()</div>
-                    <pre>    protected void doStart() throws Exception {
-        super.doStart();
-        cache = CamelContextHelper.lookup(getCamelContext(), cacheName, Cache.class);
-        if (cache == null) {
-            if (configuration.isCreateCacheIfNotExist()) {
-                cache = getComponent().getOrCreateCache(cacheName, configuration);
-            } else {
-                throw new IllegalArgumentException(
-                        &quot;Cache instance &#x27;&quot; + cacheName + &quot;&#x27; not found and createCacheIfNotExist is set to false&quot;);
-            }
-        }
-    }</pre>
-                </div>
-            </div>
-        </div>
-        
-
-        <div class="pair-container">
-            <div class="pair-header">
-                Pair #8 <span class="label-badge">Negative (Non-Clone)</span>
-            </div>
-            <div class="code-row">
-                <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 11<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.getKey(final Message message)</div>
+                    <div class="meta-info"><b>ID:</b> 11_5<br><b>ClassID:</b> 11<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.getKey(final Message message)</div>
                     <pre>    private Object getKey(final Message message) throws Exception {
         String value;
         value = message.getHeader(CaffeineConstants.KEY, String.class);
@@ -316,7 +186,69 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
     }</pre>
                 </div>
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheEndpoint.doStart()</div>
+                    <div class="meta-info"><b>ID:</b> 10_3<br><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.onInvalidateAll(Message message)</div>
+                    <pre>    public void onInvalidateAll(Message message) {
+
+        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
+         
+        if (keys == null) {
+            cache.invalidateAll();
+        } else {
+            cache.invalidateAll(keys);
+        }
+
+        setResult(message, true, null, null);
+    }</pre>
+                </div>
+            </div>
+        </div>
+        
+
+        <div class="pair-container">
+            <div class="pair-header">
+                Pair #6 <span class="label-badge">Negative (Non-Clone)</span>
+            </div>
+            <div class="code-row">
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 13_11<br><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
+                    <pre>    private void setResult(Message message, boolean success, Object result, Object oldValue) {
+        message.setHeader(CaffeineConstants.ACTION_SUCCEEDED, success);
+        message.setHeader(CaffeineConstants.ACTION_HAS_RESULT, oldValue != null || result != null);
+
+        if (oldValue != null) {
+            message.setHeader(CaffeineConstants.OLD_VALUE, oldValue);
+        }
+        if (result != null) {
+            message.setBody(result);
+        }
+    }</pre>
+                </div>
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 10_3<br><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.onInvalidateAll(Message message)</div>
+                    <pre>    public void onInvalidateAll(Message message) {
+
+        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
+         
+        if (keys == null) {
+            cache.invalidateAll();
+        } else {
+            cache.invalidateAll(keys);
+        }
+
+        setResult(message, true, null, null);
+    }</pre>
+                </div>
+            </div>
+        </div>
+        
+
+        <div class="pair-container">
+            <div class="pair-header">
+                Pair #7 <span class="label-badge">Negative (Non-Clone)</span>
+            </div>
+            <div class="code-row">
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 9_0<br><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheEndpoint.doStart()</div>
                     <pre>    protected void doStart() throws Exception {
         super.doStart();
         cache = CamelContextHelper.lookup(getCamelContext(), cacheName, LoadingCache.class);
@@ -330,17 +262,32 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
         }
     }</pre>
                 </div>
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 10_3<br><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.onInvalidateAll(Message message)</div>
+                    <pre>    public void onInvalidateAll(Message message) {
+
+        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
+         
+        if (keys == null) {
+            cache.invalidateAll();
+        } else {
+            cache.invalidateAll(keys);
+        }
+
+        setResult(message, true, null, null);
+    }</pre>
+                </div>
             </div>
         </div>
         
 
         <div class="pair-container">
             <div class="pair-header">
-                Pair #9 <span class="label-badge">Negative (Non-Clone)</span>
+                Pair #8 <span class="label-badge">Negative (Non-Clone)</span>
             </div>
             <div class="code-row">
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 12<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.getValue(final Message message, final String type)</div>
+                    <div class="meta-info"><b>ID:</b> 12_7<br><b>ClassID:</b> 12<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.getValue(final Message message, final String type)</div>
                     <pre>    private Object getValue(final Message message, final String type) throws Exception {
         Object value = message.getHeader(CaffeineConstants.VALUE);
         if (value == null) {
@@ -361,18 +308,62 @@ pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow
     }</pre>
                 </div>
                 <div class="code-col">
-                    <div class="meta-info"><b>ClassID:</b> 9<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheEndpoint.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheEndpoint.doStart()</div>
-                    <pre>    protected void doStart() throws Exception {
-        super.doStart();
-        cache = CamelContextHelper.lookup(getCamelContext(), cacheName, LoadingCache.class);
-        if (cache == null) {
-            if (configuration.isCreateCacheIfNotExist()) {
-                cache = getComponent().getOrCreateCache(cacheName, configuration);
+                    <div class="meta-info"><b>ID:</b> 13_11<br><b>ClassID:</b> 13<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.setResult(Message message, boolean success, Object result, Object oldValue)</div>
+                    <pre>    private void setResult(Message message, boolean success, Object result, Object oldValue) {
+        message.setHeader(CaffeineConstants.ACTION_SUCCEEDED, success);
+        message.setHeader(CaffeineConstants.ACTION_HAS_RESULT, oldValue != null || result != null);
+
+        if (oldValue != null) {
+            message.setHeader(CaffeineConstants.OLD_VALUE, oldValue);
+        }
+        if (result != null) {
+            message.setBody(result);
+        }
+    }</pre>
+                </div>
+            </div>
+        </div>
+        
+
+        <div class="pair-container">
+            <div class="pair-header">
+                Pair #9 <span class="label-badge">Negative (Non-Clone)</span>
+            </div>
+            <div class="code-row">
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 10_3<br><b>ClassID:</b> 10<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/cache/CaffeineCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.cache.CaffeineCacheProducer.onInvalidateAll(Message message)</div>
+                    <pre>    public void onInvalidateAll(Message message) {
+
+        Set&lt;?&gt; keys = message.getHeader(CaffeineConstants.KEYS, Set.class);
+         
+        if (keys == null) {
+            cache.invalidateAll();
+        } else {
+            cache.invalidateAll(keys);
+        }
+
+        setResult(message, true, null, null);
+    }</pre>
+                </div>
+                <div class="code-col">
+                    <div class="meta-info"><b>ID:</b> 12_7<br><b>ClassID:</b> 12<br><b>File:</b> systems/camel-java/components/camel-caffeine/src/main/java/org/apache/camel/component/caffeine/load/CaffeineLoadCacheProducer.java<br><b>Name:</b> org.apache.camel.component.caffeine.load.CaffeineLoadCacheProducer.getValue(final Message message, final String type)</div>
+                    <pre>    private Object getValue(final Message message, final String type) throws Exception {
+        Object value = message.getHeader(CaffeineConstants.VALUE);
+        if (value == null) {
+            if (type != null) {
+                Class&lt;?&gt; clazz = getEndpoint().getCamelContext().getClassResolver().resolveClass(type);
+                value = message.getBody(clazz);
             } else {
-                throw new IllegalArgumentException(
-                        &quot;LoadingCache instance &#x27;&quot; + cacheName + &quot;&#x27; not found and createCacheIfNotExist is set to false&quot;);
+                value = message.getBody();
             }
         }
+
+        if (value == null) {
+            throw new CamelExchangeException(
+                    &quot;No value provided in header or body (&quot; + CaffeineConstants.VALUE + &quot;)&quot;, message.getExchange());
+        }
+
+        return value;
     }</pre>
                 </div>
             </div>
