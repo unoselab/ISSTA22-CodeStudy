@@ -119,6 +119,8 @@ def verify_negative_samples(file_path):
                 line = line.strip()
                 if not line: continue
                 
+                total_lines += 1  # <--- FIXED: Increment here
+                
                 parts = line.split('\t')
                 
                 # Format Check: Must be ID1 [tab] ID2 [tab] Label
@@ -157,7 +159,7 @@ def verify_negative_samples(file_path):
         return
 
     # Final Report
-    print(f"Total Lines Checked: {valid_pairs + errors}")
+    print(f"Total Lines Checked: {total_lines}")
     print(f"Valid Negative Pairs: {valid_pairs}")
     
     if errors == 0:

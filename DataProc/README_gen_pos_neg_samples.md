@@ -103,7 +103,7 @@ python gen_neg_clone_sample.py
 The script will print a detailed breakdown of the math for the current dataset:
 
 ```text
-(base_py311) √ DataProc % py gen_neg_clone_sample.py 
+(base_py311) √ DataProc % py gen_neg_clone_sample.py  
 --- Loading data from: data/nicad_camel_clone_data.jsonl ---
 Loaded 985 groups with 2739 total functions.
 
@@ -127,10 +127,14 @@ Loaded 985 groups with 2739 total functions.
 --- Generating 4068 Negative Samples (Balanced) ---
 Done. Generated 4068 unique negative pairs.
 JSONL saved to: data/nicad_camel_neg_samples.jsonl
-TXT saved to: data/nicad_camel_neg_samples.txt (0 lines)
+TXT saved to: data/nicad_camel_neg_samples.txt (4068 lines)
 HTML report generated: display_neg_sample.html
 Markdown report generated: data/display_neg_sample.md
 
+--- Verifying Negative Samples: data/nicad_camel_neg_samples.txt ---
+Total Lines Checked: 4068
+Valid Negative Pairs: 4068
+✅ SUCCESS: All pairs are valid negative samples (different clone groups).
 ```
 
 ### Generated Files
@@ -138,9 +142,12 @@ Markdown report generated: data/display_neg_sample.md
 1. **`data/nicad_camel_neg_samples.txt`**: The final training list. Format:
 
 ```text
-1423_0    99_2      0
-1423_0    105_1     0
-...
+(base_py311) √ DataProc % head -n 5 data/nicad_camel_neg_samples.txt
+1624_1400	119_107	0
+1497_1337	1108_943	0
+1195_1022	1033_884	0
+188_190	2437_1911	0
+2637_2273	1739_1451	0
 
 ```
 
