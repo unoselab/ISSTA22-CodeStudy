@@ -59,7 +59,7 @@ def plot_clone_distribution(file_path):
                 va='bottom'
             )
 
-        output_file = 'clone_distribution_clone_func.png'
+        output_file = 'clone_distribution_clone_func_small.png'
         plt.savefig(output_file)
         print(f"\nGraph saved to: {output_file}")
         print("Done.")
@@ -69,5 +69,6 @@ def plot_clone_distribution(file_path):
 
 if __name__ == "__main__":
     # Use the first CLI argument as input, otherwise fall back to the default path.
-    input_file = sys.argv[1] if len(sys.argv) > 1 else "data/nicad_camel_clone_func.jsonl"
+    # input_file = sys.argv[1] if len(sys.argv) > 1 else "data/nicad_camel_clone_func.jsonl"
+    input_file = sys.argv[1] if len(sys.argv) > 1 else "data/nicad_camel_clone_func_small.jsonl"
     plot_clone_distribution(input_file)
