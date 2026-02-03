@@ -6,12 +6,12 @@ __pycache__/
 
 # --- Training Logs ---
 *.log
-log_*.txt
+log*.txt
 runs/
 
 # --- Heavy Model Checkpoints ---
 # We ignore these to prevent the repo from becoming huge (GBs of data)
-saved_models/
+saved_models*/
 *.bin
 *.pt
 *.pth
@@ -21,6 +21,7 @@ checkpoint-*/
 dataset/
 DataProc/nicad-*
 FCDetector/target/
+bck/
 *.zip
 *.tar.gz
 

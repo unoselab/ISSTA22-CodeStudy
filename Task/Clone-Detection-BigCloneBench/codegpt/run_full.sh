@@ -53,15 +53,15 @@ LAUNCH_CMD="accelerate launch"
 [ "$NUM_GPUS" -gt 1 ] && LAUNCH_CMD="$LAUNCH_CMD --multi_gpu --num_processes $NUM_GPUS"
 
 # Ensure output directory exists
-mkdir -p ./saved_models_final/
+mkdir -p ./saved_models_size_400/
 
 echo ">>> [Start] Initiating Full Training..."
-echo "    - Output Dir : ./saved_models_final/"
-echo "    - Log File   : ./saved_models_final/train_full.log"
+echo "    - Output Dir : ./saved_models_size_400/"
+echo "    - Log File   : ./saved_models_size_400/train_full.log"
 echo "    - Save Freq  : Every 500 steps"
 
 $LAUNCH_CMD run.py \
-    --output_dir=./saved_models_final/ \
+    --output_dir=./saved_models_size_400/ \
     --model_type=gpt2 \
     --config_name=microsoft/CodeGPT-small-java-adaptedGPT2 \
     --model_name_or_path=microsoft/CodeGPT-small-java-adaptedGPT2 \
@@ -71,7 +71,7 @@ $LAUNCH_CMD run.py \
     --train_data_file=../dataset/train.txt \
     --eval_data_file=../dataset/valid.txt \
     --test_data_file=../dataset/test.txt \
-    --block_size 1024 \
+    --block_size 400 \
     --train_batch_size $PER_GPU_BATCH \
     --gradient_accumulation_steps $ACCUM_STEPS \
     --eval_batch_size 32 \
@@ -83,4 +83,4 @@ $LAUNCH_CMD run.py \
     --logging_steps 100 \
     --save_total_limit 2 \
     --overwrite_output_dir \
-    --seed 3 2>&1 | tee ./saved_models_final/train_full.log
+    --seed 3 2>&1 | tee ./saved_models_size_400/train_full.log
