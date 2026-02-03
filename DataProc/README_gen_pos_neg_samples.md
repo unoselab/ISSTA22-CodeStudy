@@ -16,14 +16,7 @@ Imagine a Clone Group containing **4 functions** (A, B, C, D). Since they are al
 
 2. **Removing Duplicates:** A connection from A to B is the same as B to A. We must divide by 2 to remove this double counting.
 
-### The General Formula
-
-For any group of size , the maximum number of unique pairs is calculated using the "N choose 2" formula:
-
-**Example:**
-
--   **Clone Group Size:** 5 functions
--   **Calculation:** pairs.
+The General FormulaFor any group of size $N$, the maximum number of unique pairs is calculated using the "N choose 2" formula:$$\text{Total Pairs} = \binom{N}{2} = \frac{N(N-1)}{2}$$Example:Clone Group Size: 5 functionsCalculation: $\frac{5 \times 4}{2} = 10$ pairs.
 
 ---
 
