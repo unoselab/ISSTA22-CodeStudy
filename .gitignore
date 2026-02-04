@@ -24,6 +24,7 @@ FCDetector/target/
 bck/
 *.zip
 *.tar.gz
+*.gz
 
 # --- IDE Settings ---
 .vscode/
