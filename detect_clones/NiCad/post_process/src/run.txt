@@ -1,40 +1,50 @@
-SRC_BASE="/home/user1-system11/research_dream/clone_research/clone_detectors/NiCad/systems"
-DST="/home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/input"
-
-mkdir -p "$DST"
-
-find "$SRC_BASE" \
-  -type f \
-  -path "*_functions-blind-clones/*-classes-withsource.xml" \
-  -exec cp -v {} "$DST" \;
-
 
 python 1_nicad_xml_to_jsonl.py \
-    --xml /home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/input/activemq-java_functions-blind-clones-0.30-classes-withsource.xml \
-    --out /home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/output/activemq/step1_nicad_activemq_sim0.7_classes.jsonl \
-    --mode class \
-    > /home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/output/activemq/step1_nicad_activemq_sim0.7_classes.log 2>&1
+    --xml ../input/camel-java_functions-blind-clones-0.30-classes-withsource.xml \
+    --out ../data/java/step1_nicad_camel_sim0.7_raw.jsonl 
 
 python 2_java_qmethod_ts.py \
-  --in /home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/output/activemq/step1_nicad_activemq_sim0.7_classes.jsonl \
-  --out /home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/output/activemq/step2_nicad_activemq_sim0.7_classes_fqn.jsonl \
-  --projects-root /home/user1-system11/research_dream/clone_research/clone_detectors/NiCad \
-  > /home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/output/activemq/step2_nicad_activemq_sim0.7_classes_fqn.log 2>&1
+  --in ../data/java/step1_nicad_camel_sim0.7_raw.jsonl \
+  --out ../data/java/step2_nicad_camel_sim0.7_fqn.jsonl \
+  --projects-root /home/user1-system11/research_dream/clone_research/clone_detectors/NiCad
+
+python 3_filter_out_data.py \
+  --input ../data/java/step2_nicad_camel_sim0.7_fqn.jsonl \
+  --output ../data/java/step3_nicad_camel_sim0.7_fqn_filtered.jsonl \
+  --max_clones 20
+
+python 4_gen_init_train_sample.py \
+  --input ../data/java/step3_nicad_camel_sim0.7_fqn_filtered.jsonl \
+  --output ../data/java/step4_nicad_camel_sim0.7_fqn_filtered_with_func_id.jsonl
+
+python 5_gen_neg_clone_sample.py \
+  --input ../data/java/step4_nicad_camel_sim0.7_fqn_filtered_with_func_id.jsonl \
+  --out_txt ../data/java/step5_nicad_camel_sim0.7_neg_pairs.txt \
+  --out_jsonl ../data/java/step5_nicad_camel_sim0.7_neg_pairs.jsonl \
+  --out_html ../data/java/step5_display_nicad_camel_sim0.7_neg_pairs.html \
+  --out_md ../data/java/step5_display_nicad_camel_sim0.7_neg_pairs.md \
+  --seed 42 \
+  --verify \
+  --cleanup
+
+python 6_gen_pos_clone_sample.py \
+  --input ../data/java/step4_nicad_camel_sim0.7_fqn_filtered_with_func_id.jsonl \
+  --out_txt ../data/java/step6_nicad_camel_sim0.7_pos_pairs.txt \
+  --out_jsonl ../data/java/step6_nicad_camel_sim0.7_pos_pairs.jsonl \
+  --out_html ../data/java/step6_display_nicad_camel_sim0.7_pos_pairs.html \
+  --out_md ../data/java/step6_display_nicad_camel_sim0.7_pos_pairs.md \
+  --seed 42 \
+  --verify \
+  --cleanup
 
 
+python 7_gen_clone_bench.py \
+  --input ../data/java/step4_nicad_camel_sim0.7_fqn_filtered_with_func_id.jsonl \
+  --output ../data/java/camel/step7_nicad_camel_sim0.7_clone_bench.jsonl \
+  --dedup
 
-chmod +x run_nicad_xml_to_jsonl.sh
-
-LOG_DIR="/home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/output"
-
-echo "project,classes_parsed,nclones_total,nclones_avg" > nicad_stats.csv
-
-for log in "$LOG_DIR"/nicad_*_sim0.7_classes.log; do
-    project=$(basename "$log" | sed 's/^nicad_//' | sed 's/_sim0.7_classes.log$//')
-
-    classes=$(grep "classes parsed" "$log" | awk -F= '{gsub(/ /,"",$2); print $2}')
-    total=$(grep "nclones total" "$log" | awk -F= '{gsub(/ /,"",$2); print $2}')
-    avg=$(grep "nclones avg (all classes)" "$log" | awk -F= '{gsub(/ /,"",$2); print $2}')
-
-    echo "$project,$classes,$total,$avg" >> nicad_stats.csv
-done
+python 8_split_comine_neg_pos_pairs.py \
+  --neg ../data/java/step5_nicad_camel_sim0.7_neg_pairs.txt \
+  --pos ../data/java/step6_nicad_camel_sim0.7_pos_pairs.txt \
+  --out_dir ../data/java/camel \
+  --seed 42 
