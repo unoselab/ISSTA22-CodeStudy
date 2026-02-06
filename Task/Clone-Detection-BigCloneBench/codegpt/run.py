@@ -148,8 +148,12 @@ class TextDataset(Dataset):
                 else:
                     label=1
                 data.append((url1,url2,label,tokenizer, args,cache,url_to_code))
-        if 'test' not in postfix:
-            data=random.sample(data,int(len(data)*0.1))
+        # if 'test' not in postfix: # m. song - updated to load data fully.
+        #     data=random.sample(data,int(len(data)*0.1))
+        ratio = getattr(args, "subsample_ratio", 1.0)
+        if ratio < 1.0 and 'test' not in postfix:
+            k = max(1, int(len(data) * ratio))
+            data = random.sample(data, k)
 
         self.examples=pool.map(get_example,tqdm(data,total=len(data)))
         if 'train' in postfix:
@@ -190,9 +194,9 @@ def train(args, train_dataset, model, tokenizer,pool):
     
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
     args.max_steps=args.epoch*len( train_dataloader)
-    # # # # args.save_steps=len( train_dataloader)
+    # # # # # args.save_steps=len( train_dataloader)
     args.warmup_steps=len( train_dataloader)
-    # # # # args.logging_steps=len( train_dataloader)
+    # # # # # args.logging_steps=len( train_dataloader)
     args.num_train_epochs=args.epoch
     model.to(args.device)
     # Prepare optimizer and schedule (linear warmup and decay)
@@ -562,7 +566,8 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
-
+    parser.add_argument("--subsample_ratio", type=float, default=1.0,
+                        help="Use <1.0 to subsample train/valid. 1.0 means full data.")
     
     pool = multiprocessing.Pool(cpu_cont)
     args = parser.parse_args()

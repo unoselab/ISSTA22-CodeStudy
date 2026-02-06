@@ -62,6 +62,7 @@ echo "    - Save Freq  : Every 500 steps"
 
 $LAUNCH_CMD run.py \
     --output_dir=./saved_models/ \
+    --subsample_ratio 1.0 \
     --model_type=gpt2 \
     --config_name=microsoft/CodeGPT-small-java-adaptedGPT2 \
     --model_name_or_path=microsoft/CodeGPT-small-java-adaptedGPT2 \
