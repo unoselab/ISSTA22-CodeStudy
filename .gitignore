@@ -31,7 +31,4 @@ bck/
 .idea/
 .classpath
 .project
-/Examples/nicad-camel-clone-func
-/Examples/nicad-camel/camel-java
-/Examples/nicad-camel/camel-java_functions-blind-clones
-/Examples/nicad-camel
+/Examples/
