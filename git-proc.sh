@@ -8,4 +8,4 @@ if [ -n "$ADDITIONAL_COMMENT" ]; then
 else
     git commit -m "$TIMESTAMP" -m "Updated"
 fi
-git push
+git push origin HEAD

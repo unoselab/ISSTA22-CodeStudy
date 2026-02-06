@@ -1,78 +1,115 @@
+#!/usr/bin/env python3
+"""
+4_gen_init_train_sample.py
+
+Purpose
+-------
+Assign a globally unique func_id to every function in each clone group.
+
+Input:
+  JSONL clone groups with structure:
+    {
+      "classid": <int|str>,
+      "sources": [ { ... }, { ... }, ... ]
+    }
+
+Output:
+  Same JSONL structure, but each source has:
+    func_id = {classid}_{global_counter}
+
+This step prepares the dataset for:
+  - negative sampling
+  - positive sampling
+  - clone benchmarks
+"""
+
+import argparse
 import json
 import os
 import sys
 
-# Default file paths
-# DEFAULT_INPUT = "data/nicad_camel_clone_func_small.jsonl"
-# DEFAULT_OUTPUT = "data/nicad_camel_clone_data_small.jsonl"
-DEFAULT_INPUT =  "../data/java/nicad_camel_clone_func.jsonl"
-DEFAULT_OUTPUT = "../data/java/nicad_camel_clone_data.jsonl"
 
-def add_unique_ids(input_file, output_file):
+def add_unique_ids(input_file: str, output_file: str) -> None:
     if not os.path.exists(input_file):
-        print(f"Error: Input file '{input_file}' not found.")
-        return
+        print(f"[ERROR] Input file not found: {input_file}")
+        sys.exit(1)
 
-    print(f"--- Processing: {input_file} ---")
-    
+    print(f"--- Step 4: Assigning func_id ---")
+    print(f"Input : {input_file}")
+    print(f"Output: {output_file}")
+
+    os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
+
     global_func_counter = 0
     total_groups = 0
 
+    with open(input_file, "r", encoding="utf-8") as fin, \
+         open(output_file, "w", encoding="utf-8") as fout:
+
+        for line_no, line in enumerate(fin, 1):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                print(f"[WARN] Skipping invalid JSON at line {line_no}")
+                continue
+
+            class_id = data.get("classid", "unknown")
+            sources = data.get("sources", [])
+
+            for src in sources:
+                src["func_id"] = f"{class_id}_{global_func_counter}"
+                global_func_counter += 1
+
+            fout.write(json.dumps(data, ensure_ascii=False) + "\n")
+            total_groups += 1
+
+    print("--- Completed ---")
+    print(f"Clone groups processed : {total_groups}")
+    print(f"Total functions tagged : {global_func_counter}")
+    print(f"Saved to               : {output_file}")
+
+    _verify_sample(output_file)
+
+
+def _verify_sample(file_path: str) -> None:
+    """Print a small verification sample from the first line."""
     try:
-        with open(input_file, 'r', encoding='utf-8') as f_in, \
-             open(output_file, 'w', encoding='utf-8') as f_out:
-            
-            for line in f_in:
-                line = line.strip()
-                if not line: continue
-                
-                try:
-                    data = json.loads(line)
-                    class_id = data.get("classid", "unknown") # Get Clone Group ID
-                    sources = data.get("sources", [])
-                    
-                    # Iterate through each function source
-                    for src in sources:
-                        # Rule: {classid}_{global_uniq_id}
-                        # Example: 1423_0, 1423_1, 99_2 ...
-                        src["func_id"] = f"{class_id}_{global_func_counter}"
-                        
-                        global_func_counter += 1
-                    
-                    f_out.write(json.dumps(data) + "\n")
-                    total_groups += 1
-                    
-                except json.JSONDecodeError:
-                    print("Skipping invalid JSON line.")
-                    continue
-                    
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return
-
-    print(f"--- Completed ---")
-    print(f"Processed {total_groups} clone groups.")
-    print(f"Total functions processed: {global_func_counter}")
-    print(f"Output saved to: {output_file}")
-
-    print("\n[Verification Sample]")
-    verify_output(output_file)
-
-def verify_output(file_path):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            first_line = f.readline()
-            if first_line:
-                data = json.loads(first_line)
-                if data.get('sources'):
-                    first_src = data['sources'][0]
-                    print(f"ClassID: {data['classid']}")
-                    print(f"New ID Format: {first_src.get('func_id')}  <-- (Group_GlobalCount)")
+        with open(file_path, "r", encoding="utf-8") as f:
+            line = f.readline()
+            if not line:
+                return
+            obj = json.loads(line)
+            if obj.get("sources"):
+                src = obj["sources"][0]
+                print("\n[Verification Sample]")
+                print(f"  classid : {obj.get('classid')}")
+                print(f"  func_id : {src.get('func_id')}  (classid_globalIndex)")
     except Exception:
         pass
 
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Add globally unique func_id to each function in clone groups"
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="Input JSONL clone groups (from Step 3)",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="Output JSONL with func_id added (Step 4 output)",
+    )
+
+    args = parser.parse_args()
+    add_unique_ids(args.input, args.output)
+
+
 if __name__ == "__main__":
-    input_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INPUT
-    output_path = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_OUTPUT
-    
-    add_unique_ids(input_path, output_path)
+    main()
