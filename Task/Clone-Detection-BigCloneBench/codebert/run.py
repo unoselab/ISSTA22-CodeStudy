@@ -134,7 +134,7 @@ class TextDataset(Dataset):
 
         data=[]
         cache={}
-        f=open(index_filename)
+        # f=open(index_filename) # M. Song - 2026.2.5 - unused file descriptor.
         with open(index_filename) as f:
             for line in f:
                 line=line.strip()
@@ -146,8 +146,10 @@ class TextDataset(Dataset):
                 else:
                     label=1
                 data.append((url1,url2,label,tokenizer, args,cache,url_to_code))
-        if 'test' not in postfix:
-            data=random.sample(data,int(len(data)*0.1))
+        # NOTE: 10% sampling is handled externally (train_10percent.txt / valid_10percent.txt)
+        # if 'test' not in postfix:
+        #     data=random.sample(data,int(len(data)*0.1))
+        logger.info(f"[Dataset] postfix={postfix} pairs_loaded={len(data)}")
 
         self.examples=pool.map(get_example,tqdm(data,total=len(data)))
         if 'train' in postfix:
@@ -157,7 +159,6 @@ class TextDataset(Dataset):
                     logger.info("label: {}".format(example.label))
                     logger.info("input_tokens: {}".format([x.replace('\u0120','_') for x in example.input_tokens]))
                     logger.info("input_ids: {}".format(' '.join(map(str, example.input_ids))))
-
 
 
     def __len__(self):
