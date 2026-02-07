@@ -51,3 +51,4 @@ python 2_mix_data.py \
   --seed 3
 
 
+python 3_verify_data.py --strict --otherdomain_name camel
