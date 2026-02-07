@@ -1,42 +1,48 @@
-# Fine-tuning with BCB (10%) + Other-Domain Mix (e.g., Camel)
+# Fine-tuning CodeGPT with BCB (10%) + Other-Domain Mix
+
+_(Cross-Domain Evaluation on Other Domain Only)_
 
 **Date:** 2026-02-06
 
-**Scope:** CodeGPT (first), then CodeBERT (next), using the same mixed dataset artifacts.
+**Model:** CodeGPT (Java)
 
-**Goal:** Improve **cross-project / cross-domain generalization** by:
+**Goal:**
+Improve **cross-project / cross-domain generalization** by:
 
 - **Training & validation** on a mixed dataset:
     - **BCB (BigCloneBench):** 10% subset (label-balanced)
     - **Other Domain (e.g., Camel):** NiCad post-processed clone pairs
 
-- **Testing exclusively on the other domain** (e.g., Camel) to evaluate true cross-domain generalization.
-
-This README documents the **full end-to-end process**, including preprocessing rationale, commands, verification steps, and observed results.
+- **Testing exclusively on the other domain** (e.g., Camel) to evaluate
+  how well a model trained primarily on BCB generalizes to unseen projects.
 
 ---
 
-## 0. Directory & Files Overview
+## 1. Experimental Setting (Summary)
 
-### Working Directory
+| Split | Dataset Composition                 |
+| ----- | ----------------------------------- |
+| Train | BCB (10%) + Other domain            |
+| Valid | BCB (10%) + Other domain            |
+| Test  | **Other domain only** (e.g., Camel) |
 
-`Clone-Detection-BigCloneBench/codegpt/`
-(Used for dataset preprocessing and CodeGPT training)
+> **Important:**
+> No BCB test pairs are used during evaluation.
+> This avoids test leakage and enables strict cross-domain evaluation.
 
-### Dataset Directory Structure
+---
+
+## 2. Directory Structure
 
 ```text
 ../dataset/
-├── train.txt                     # Original BCB train (unused directly)
-├── valid.txt                     # Original BCB valid (unused directly)
-├── test.txt                      # Original test (not used for cross-domain eval)
+├── train_10percent.txt           # BCB 10% train
+├── valid_10percent.txt           # BCB 10% valid
+├── train_mix.txt                 # Mixed train (BCB + other domain)
+├── valid_mix.txt                 # Mixed valid (BCB + other domain)
+├── test_<otherdomain>.txt        # Other-domain-only test (e.g., test_camel.txt)
 ├── data.jsonl                    # Original BCB mapping
-├── train_10percent.txt           # BCB 10% train (Step 1)
-├── valid_10percent.txt           # BCB 10% valid (Step 1)
-├── train_mix.txt                 # Mixed train set (BCB 10% + other domain)
-├── valid_mix.txt                 # Mixed valid set (BCB 10% + other domain)
-├── test_<otherdomain>.txt        # Other-domain-only test set (e.g., test_camel.txt)
-└── mix/                          # Mixed artifacts
+└── mix/
     ├── data.jsonl                # Combined mapping (BCB + other domain)
     ├── train_bcb.pref.txt
     ├── valid_bcb.pref.txt
@@ -44,100 +50,51 @@ This README documents the **full end-to-end process**, including preprocessing r
     └── valid_other.pref.txt
 ```
 
-### Other-Domain Data Location (Example: Camel)
+---
 
-```text
-../../../detect_clones/NiCad/post_process/data/java/camel/
-├── train.txt
-├── valid.txt
-├── test.txt
-└── data.jsonl
+## 3. Why Prefixing and Mixing Are Required
+
+`run.py` resolves each clone pair ID via **a single mapping file** (`data.jsonl`).
+
+```python
+if url1 not in url_to_code or url2 not in url_to_code:
+    continue
 ```
+
+Therefore:
+
+- All IDs appearing in `train / valid / test` **must exist** in the mapping.
+- ID collisions across datasets must be avoided.
+
+### Solution
+
+- Prefix IDs by dataset:
+    - `bcb_<id>` for BigCloneBench
+    - `<otherdomain>_<id>` for the other domain (e.g., `camel_259_340`)
+
+- Build a unified mapping: `../dataset/mix/data.jsonl`
 
 ---
 
-## 1. Why Mixing Requires Explicit Preprocessing
+## 4. Dataset Preparation Pipeline
 
-`run.py` consumes clone-pair files (`train.txt`, `valid.txt`, `test.txt`) with format:
-
-```
-<id1> \t <id2> \t <label>
-```
-
-Each `id` must be resolvable via **a single mapping file** (`data.jsonl`).
-
-> **Critical Constraint in `run.py`:**
-> If either ID in a pair is missing from the mapping file, the pair is silently skipped:
->
-> ```python
-> if url1 not in url_to_code or url2 not in url_to_code:
->     continue
-> ```
-
-Therefore, cross-domain experiments require:
-
-1. **Unified pair files** for training/validation
-2. **A combined mapping file** containing code for _all_ IDs
-3. **Explicit ID namespaces** to avoid collisions and silent data loss
-
----
-
-## 2. Overall Pipeline
-
-The pipeline runs in **two deterministic steps**.
-
-### Step 1 — Sample 10% from BCB (Balanced)
-
-- Controls dataset size
-- Ensures 50/50 label balance
-- Guarantees reproducibility
-
-### Step 2 — Mix BCB (10%) with Other Domain
-
-- Prefixes IDs to create disjoint namespaces
-- Builds a unified mapping (`mix/data.jsonl`)
-- Produces shuffled `train_mix.txt` and `valid_mix.txt`
-- **Optionally generates an other-domain-only test set**
-  (`test_<otherdomain>.txt`) for cross-domain evaluation
-
----
-
-## 3. Step 1 — Create BCB 10% Dataset
-
-**Script:** `1_sample_data.py`
-
-### Command
+### Step 1 — Sample BCB 10% (Balanced)
 
 ```bash
 python 1_sample_data.py --seed 3 --mode balanced
 ```
 
-### Observed Output
+**Result:**
 
-```text
-[IN ] train.txt: total=901028 label0=450166 label1=450862
-[OUT] train_10percent.txt: total=90102 label0=45051 label1=45051
-
-[IN ] valid.txt: total=415416 label0=361577 label1=53839
-[OUT] valid_10percent.txt: total=41540 label0=20770 label1=20770
-```
-
-### ✅ Verification
-
-- Train: **90,102**
-- Valid: **41,540**
-- Perfect label balance
-- Deterministic sampling (`seed=3`)
+- Train: 90,102 pairs (50/50 labels)
+- Valid: 41,540 pairs (50/50 labels)
 
 ---
 
-## 4. Step 2 — Mix BCB (10%) + Other Domain (e.g., Camel)
+### Step 2 — Mix BCB (10%) + Other Domain
 
 **Script:** `2_mix_data.py`
-
-This script is **domain-agnostic** via `--otherdomain_name`.
-
-### Command (Train + Valid Mix)
+**Key option:** `--otherdomain_name`
 
 ```bash
 python 2_mix_data.py \
@@ -146,98 +103,51 @@ python 2_mix_data.py \
   --valid_data_file_bcb ../dataset/valid_10percent.txt \
   --train_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/train.txt \
   --valid_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/valid.txt \
+  --test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt \
   --bcb_jsonl ../dataset/data.jsonl \
   --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
   --seed 3
 ```
 
-### Optional: Prepare Other-Domain-Only Test Set (Recommended)
+**Outputs:**
 
-This option **does not overwrite** `dataset/test.txt`.
-It creates a new file for cross-domain evaluation only.
+- `train_mix.txt`
+- `valid_mix.txt`
+- `mix/data.jsonl`
+- `test_camel.txt` (**Camel-only test**)
+
+---
+
+## 5. Data Integrity Verification (Critical)
+
+Before training, **all pairs are verified** to ensure their IDs exist in the mapping.
 
 ```bash
---test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt
+python 3_verify_data.py --strict --otherdomain_name camel
 ```
 
-**Generated file:**
+### Verification Results
 
-```text
-../dataset/test_camel.txt
+- `train_mix.txt`: 94,170 pairs → **0 missing**
+- `valid_mix.txt`: 43,574 pairs → **0 missing**
+- `test_camel.txt`: 2,034 pairs → **0 missing**
+
 ```
+✅ PASS: All pairs are resolvable in the mapping JSONL.
+```
+
+This guarantees that `run.py` will **not silently drop data**.
 
 ---
 
-## 5. Mixing Logic (What the Script Does)
+## 6. Fine-tuning CodeGPT
 
-1. **Prefix IDs**
-    - BCB → `bcb_<id>`
-    - Other domain → `<otherdomain>_<id>` (e.g., `camel_259_340`)
-
-2. **Create Prefixed Pair Files**
-    - Saved under `../dataset/mix/*.pref.txt`
-
-3. **Build Combined Mapping**
-    - Concatenate JSONLs into `../dataset/mix/data.jsonl`
-    - Apply the same prefixes to `idx`
-
-4. **Merge & Shuffle (Train / Valid only)**
-    - Deterministic shuffle using `seed=3`
-    - Outputs:
-        - `train_mix.txt`
-        - `valid_mix.txt`
-
-5. **Other-Domain Test Preparation (Optional)**
-    - Generates:
-        - `test_<otherdomain>.txt` (e.g., `test_camel.txt`)
-
-    - Contains **only other-domain pairs**
-    - Used exclusively for cross-domain evaluation
-
----
-
-## 6. Observed Output (Execution Log)
-
-```text
-[OK] prefixed pairs: train_10percent.txt -> train_bcb.pref.txt (90102)
-[OK] prefixed pairs: valid_10percent.txt -> valid_bcb.pref.txt (41540)
-[OK] prefixed pairs: camel/train.txt -> train_other.pref.txt (4068)
-[OK] prefixed pairs: camel/valid.txt -> valid_other.pref.txt (2034)
-
-[OK] appended jsonl: data.jsonl (+9126) with prefix=bcb_
-[OK] appended jsonl: camel/data.jsonl (+2739) with prefix=camel_
-
-[OK] merged+shuffled: train_mix.txt (94170)
-[OK] merged+shuffled: valid_mix.txt (43574)
-```
-
-### ✅ Verification
-
-- Train total: **94,170**
-- Valid total: **43,574**
-- JSONL entries: **11,865**
-
----
-
-## 7. Critical Consistency Check (IDs ↔ Mapping)
-
-```python
-checked: 20
-missing: 0
-```
-
-✅ Confirms **no silent data loss** in `run.py`.
-
----
-
-## 8. Training CodeGPT on Mixed Dataset
-
-### Required Flags
-
-Because the mapping file is loaded from `<dataset_dir>/<test_type>/data.jsonl`:
+### Key Flags
 
 - `--test_type mix`
-- All pair files must use prefixed IDs
+  → loads `../dataset/mix/data.jsonl`
+- `--test_data_file ../dataset/test_camel.txt`
+  → **other-domain-only evaluation**
 
 ### Training Command
 
@@ -263,40 +173,40 @@ accelerate launch run.py \
   --seed 3
 ```
 
-> **Note:**
-> Testing is performed on the **other domain only** (e.g., Camel).
-> No BCB test pairs are included.
+---
+
+## 7. Interpretation of Results
+
+- Training benefits from **diverse supervision** (BCB + other domain)
+- Testing strictly measures **generalization to a new domain**
+- The setup avoids:
+    - ID mismatch errors
+    - Silent test data drops
+    - Test leakage from training domain
+
+This configuration is suitable for:
+
+- Cross-project clone detection studies
+- Domain adaptation experiments
+- Reproducible ML/SE research
 
 ---
 
-## 9. Next Step: CodeBERT
+## 8. Next Step: CodeBERT
 
-The **same mixed dataset artifacts** are reused:
+The **same dataset artifacts** can be reused for CodeBERT:
 
 - `train_mix.txt`
 - `valid_mix.txt`
-- `test_<otherdomain>.txt` (e.g., `test_camel.txt`)
+- `test_<otherdomain>.txt`
 - `mix/data.jsonl`
 
 Only the model backend changes.
 
 ---
 
-## Appendix: Quick Copy-Paste
+### ✔ Status
 
-```bash
-# Step 1: Sample BCB 10% (balanced)
-python 1_sample_data.py --seed 3 --mode balanced
-
-# Step 2: Mix train/valid + prepare other-domain-only test
-python 2_mix_data.py \
-  --otherdomain_name camel \
-  --train_data_file_bcb ../dataset/train_10percent.txt \
-  --valid_data_file_bcb ../dataset/valid_10percent.txt \
-  --train_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/train.txt \
-  --valid_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/valid.txt \
-  --test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt \
-  --bcb_jsonl ../dataset/data.jsonl \
-  --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
-  --seed 3
-```
+- Dataset preparation: **DONE**
+- Data verification: **PASS**
+- Ready for training & evaluation
