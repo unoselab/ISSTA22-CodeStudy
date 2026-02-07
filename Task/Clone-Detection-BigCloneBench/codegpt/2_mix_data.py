@@ -3,15 +3,17 @@ import argparse
 import json
 import random
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 DEFAULT_SEED = 3
+
 
 def prefix_pairs(in_path: Path, out_path: Path, prefix: str):
     """
     Prefix pair identifiers in a clone-pair TSV file to avoid ID collisions.
     Supports both tab- and space-separated files.
     Format: <id1> <id2> <label>
+    Output is normalized as TSV.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
@@ -21,17 +23,22 @@ def prefix_pairs(in_path: Path, out_path: Path, prefix: str):
             line = line.strip()
             if not line:
                 continue
-            parts = line.split()  # handles both tabs and spaces
+            parts = line.split()
             if len(parts) != 3:
                 skipped += 1
                 continue
             u1, u2, y = parts
-            fout.write(f"{prefix}{u1}\t{prefix}{u2}\t{y}\n")  # output TSV normalized
+            fout.write(f"{prefix}{u1}\t{prefix}{u2}\t{y}\n")
             n += 1
     print(f"[OK] prefixed pairs: {in_path} -> {out_path} (lines={n}, skipped={skipped})")
 
 
-def build_mix_jsonl(bcb_jsonl: Path, more_jsonl: Path, out_jsonl: Path):
+def build_mix_jsonl(bcb_jsonl: Path, other_jsonl: Path, out_jsonl: Path, other_prefix: str):
+    """
+    Build combined mapping jsonl:
+      - BCB entries prefixed with 'bcb_'
+      - Other-domain entries prefixed with '<otherdomain>_'
+    """
     out_jsonl.parent.mkdir(parents=True, exist_ok=True)
     if out_jsonl.exists():
         out_jsonl.unlink()
@@ -44,14 +51,15 @@ def build_mix_jsonl(bcb_jsonl: Path, more_jsonl: Path, out_jsonl: Path):
                 if not line:
                     continue
                 js = json.loads(line)
-                # Expect an 'idx' field in each jsonl row
+                if "idx" not in js:
+                    continue
                 js["idx"] = f"{prefix}{js['idx']}"
                 fout.write(json.dumps(js, ensure_ascii=False) + "\n")
                 n += 1
         print(f"[OK] appended jsonl: {src} (+{n}) with prefix={prefix}")
 
     append_with_prefix(bcb_jsonl, "bcb_")
-    append_with_prefix(more_jsonl, "camel_")  # "more" == other domain in this setup
+    append_with_prefix(other_jsonl, other_prefix)
 
 
 def merge_shuffle(out_path: Path, files: List[Path], seed: int):
@@ -66,88 +74,79 @@ def merge_shuffle(out_path: Path, files: List[Path], seed: int):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Create mixed (BCB + other-domain) train/valid/test + combined data.jsonl.")
+    p = argparse.ArgumentParser(
+        description=(
+            "Create mixed (BCB + other-domain) train/valid datasets and combined mix/data.jsonl. "
+            "Optionally generate an OTHER-DOMAIN-ONLY test file with prefixed IDs at "
+            "../dataset/test_<otherdomain_name>.txt (no overwrite of ../dataset/test.txt)."
+        )
+    )
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
+
+    # Other domain name (controls prefix + output test filename)
+    p.add_argument("--otherdomain_name", type=str, required=True,
+                   help="Other domain name used as prefix and test output naming, e.g., camel -> camel_ and test_camel.txt")
 
     # Required pair files
     p.add_argument("--train_data_file_bcb", type=str, required=True)
-    p.add_argument("--train_data_file_more", type=str, required=True)
     p.add_argument("--valid_data_file_bcb", type=str, required=True)
+    p.add_argument("--train_data_file_more", type=str, required=True)
     p.add_argument("--valid_data_file_more", type=str, required=True)
 
-    # Optional test pair files (new)
-    p.add_argument("--test_data_file_bcb", type=str, default=None,
-                   help="Optional: BCB test pairs file (id1 id2 label). If given, will be prefixed with bcb_.")
+    # Optional: other-domain test file (other-domain-only evaluation)
     p.add_argument("--test_data_file_otherdomain", type=str, default=None,
-                   help="Optional: other-domain (e.g., Camel) test pairs file (id1 id2 label). If given, will be prefixed with camel_.")
+                   help="Other-domain test pairs file (id1 id2 label). If provided, generates ../dataset/test_<otherdomain_name>.txt")
 
-    # Required jsonl mapping files
-    p.add_argument("--bcb_jsonl", type=str, required=True, help="BCB data.jsonl path")
-    p.add_argument("--more_jsonl", type=str, required=True, help="Other-domain (e.g., Camel) data.jsonl path")
+    # Mapping files
+    p.add_argument("--bcb_jsonl", type=str, required=True)
+    p.add_argument("--more_jsonl", type=str, required=True)
 
     # Outputs
-    p.add_argument("--out_dir", type=str, default="../dataset/mix",
-                   help="Directory for prefixed files + mix data.jsonl")
+    p.add_argument("--out_dir", type=str, default="../dataset/mix")
     p.add_argument("--out_train_mix", type=str, default="../dataset/train_mix.txt")
     p.add_argument("--out_valid_mix", type=str, default="../dataset/valid_mix.txt")
 
-    # New output for test (optional)
-    p.add_argument("--out_test_mix", type=str, default="../dataset/test_mix.txt",
-                   help="Output test mix file. Only written if at least one test input is provided.")
-
     args = p.parse_args()
+
+    other_prefix = f"{args.otherdomain_name}_"
+    print(f"[INFO] other-domain prefix = {other_prefix}")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Prefix train/valid pair files
-    bcb_train_p  = out_dir / "train_bcb.pref.txt"
-    bcb_valid_p  = out_dir / "valid_bcb.pref.txt"
-    more_train_p = out_dir / "train_more.pref.txt"
-    more_valid_p = out_dir / "valid_more.pref.txt"
+    # 1) Prefix train/valid
+    bcb_train_p = out_dir / "train_bcb.pref.txt"
+    bcb_valid_p = out_dir / "valid_bcb.pref.txt"
+    other_train_p = out_dir / "train_other.pref.txt"
+    other_valid_p = out_dir / "valid_other.pref.txt"
 
-    prefix_pairs(Path(args.train_data_file_bcb),  bcb_train_p,  "bcb_")
-    prefix_pairs(Path(args.valid_data_file_bcb),  bcb_valid_p,  "bcb_")
-    prefix_pairs(Path(args.train_data_file_more), more_train_p, "camel_")
-    prefix_pairs(Path(args.valid_data_file_more), more_valid_p, "camel_")
+    prefix_pairs(Path(args.train_data_file_bcb), bcb_train_p, "bcb_")
+    prefix_pairs(Path(args.valid_data_file_bcb), bcb_valid_p, "bcb_")
+    prefix_pairs(Path(args.train_data_file_more), other_train_p, other_prefix)
+    prefix_pairs(Path(args.valid_data_file_more), other_valid_p, other_prefix)
 
-    # 2) Create combined jsonl
+    # 2) Build combined jsonl
     mix_jsonl = out_dir / "data.jsonl"
-    build_mix_jsonl(Path(args.bcb_jsonl), Path(args.more_jsonl), mix_jsonl)
+    build_mix_jsonl(Path(args.bcb_jsonl), Path(args.more_jsonl), mix_jsonl, other_prefix)
 
-    # 3) Create train_mix / valid_mix (shuffled)
-    train_mix = Path(args.out_train_mix)
-    valid_mix = Path(args.out_valid_mix)
+    # 3) Merge train / valid
+    merge_shuffle(Path(args.out_train_mix), [bcb_train_p, other_train_p], seed=args.seed)
+    merge_shuffle(Path(args.out_valid_mix), [bcb_valid_p, other_valid_p], seed=args.seed)
 
-    merge_shuffle(train_mix, [bcb_train_p, more_train_p], seed=args.seed)
-    merge_shuffle(valid_mix, [bcb_valid_p, more_valid_p], seed=args.seed)
-
-    # 4) Optional: Create test_mix (shuffled)
-    test_inputs: List[Path] = []
-
-    if args.test_data_file_bcb:
-        bcb_test_p = out_dir / "test_bcb.pref.txt"
-        prefix_pairs(Path(args.test_data_file_bcb), bcb_test_p, "bcb_")
-        test_inputs.append(bcb_test_p)
-
+    # 4) Generate OTHER-DOMAIN-ONLY test file (no overwrite)
     if args.test_data_file_otherdomain:
-        other_test_p = out_dir / "test_otherdomain.pref.txt"
-        prefix_pairs(Path(args.test_data_file_otherdomain), other_test_p, "camel_")
-        test_inputs.append(other_test_p)
-
-    if test_inputs:
-        test_mix = Path(args.out_test_mix)
-        merge_shuffle(test_mix, test_inputs, seed=args.seed)
-        print(f"[OK] test_mix: {test_mix}")
+        out_test = Path("../dataset") / f"test_{args.otherdomain_name}.txt"
+        prefix_pairs(Path(args.test_data_file_otherdomain), out_test, other_prefix)
+        print(f"[OK] wrote OTHER-DOMAIN-ONLY test file: {out_test}")
     else:
-        print("[SKIP] No test inputs provided; test_mix not created.")
+        print("[SKIP] No other-domain test file requested.")
 
     print("\nDone.")
-    print(f"- train_mix: {train_mix}")
-    print(f"- valid_mix: {valid_mix}")
+    print(f"- train_mix: {args.out_train_mix}")
+    print(f"- valid_mix: {args.out_valid_mix}")
     print(f"- mix jsonl:  {mix_jsonl}")
-    if test_inputs:
-        print(f"- test_mix:  {Path(args.out_test_mix)}")
+    if args.test_data_file_otherdomain:
+        print(f"- test(other-domain only): ../dataset/test_{args.otherdomain_name}.txt")
 
 
 if __name__ == "__main__":

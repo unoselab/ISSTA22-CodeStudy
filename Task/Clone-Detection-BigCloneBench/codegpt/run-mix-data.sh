@@ -6,7 +6,6 @@
 #        ../dataset/valid_10percent.txt
 python 1_sample_data.py --seed 3 --mode balanced
 
-
 # 2) Build a mixed dataset: BCB(10%) + Other Domain (e.g., Camel)
 #    - Merges clone-pair files (id1, id2, label) from:
 #        * BCB (10% sampled):
@@ -15,24 +14,30 @@ python 1_sample_data.py --seed 3 --mode balanced
 #        * Other domain (specified via --otherdomain_name, e.g., Camel):
 #            - ../../../detect_clones/.../<otherdomain>/train.txt
 #            - ../../../detect_clones/.../<otherdomain>/valid.txt
-#            - (optional) ../../../detect_clones/.../<otherdomain>/test.txt
+#
+#    - Optionally prepares an OTHER-DOMAIN-ONLY test set for cross-domain evaluation:
+#        * Input:
+#            - ../../../detect_clones/.../<otherdomain>/test.txt
+#        * Output (new file, no overwrite):
+#            - ../dataset/test_<otherdomain>.txt
 #
 #    - Creates a combined code mapping (mix/data.jsonl) by concatenating:
-#        * BCB mapping:        ../dataset/data.jsonl
+#        * BCB mapping:
+#            - ../dataset/data.jsonl
 #        * Other-domain mapping:
-#            ../../../detect_clones/.../<otherdomain>/data.jsonl
+#            - ../../../detect_clones/.../<otherdomain>/data.jsonl
 #
-#    - Prefixes all function IDs to avoid collisions:
-#        * BCB IDs         -> bcb_<id>
+#    - Prefixes all function IDs to avoid collisions and ensure resolvability:
+#        * BCB IDs          -> bcb_<id>
 #        * Other-domain IDs -> <otherdomain>_<id>
 #
-#    - Shuffles merged train / valid (and optional test) sets deterministically
+#    - Shuffles merged train / valid sets deterministically
 #      using a fixed random seed (seed=3)
 #
 #    - Outputs (expected):
 #        * ../dataset/train_mix.txt
 #        * ../dataset/valid_mix.txt
-#        * (optional) ../dataset/test_mix.txt
+#        * ../dataset/test_<otherdomain>.txt   (optional, other-domain only)
 #        * ../dataset/mix/data.jsonl
 python 2_mix_data.py \
   --otherdomain_name camel \
@@ -44,3 +49,5 @@ python 2_mix_data.py \
   --bcb_jsonl ../dataset/data.jsonl \
   --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
   --seed 3
+
+
