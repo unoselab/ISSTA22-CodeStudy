@@ -41,16 +41,16 @@ Instead of evaluating only a few isolated thresholds, we group thresholds into
 
 Planned NiCad similarity threshold ranges include:
 
-- 01: **0.90 – 0.85**
-- 02: **0.85 – 0.80**
-- 03: **0.80 – 0.75**
-- 04: **0.75 – 0.70**
-- 05: **0.70 – 0.65**
-- 06: **0.65 – 0.60**
-- 07: **0.60 – 0.55**
-- 08: **0.55 – 0.50**
-- 09: **0.50 – 0.45**
-- 10: **0.45 – 0.40**
+* 01: **100 – 95**
+* 02: **95 – 90**
+* 03: **90 – 85**
+* 04: **85 – 80**
+* 05: **80 – 75**
+* 06: **75 – 70**
+* 07: **70 – 65**
+* 08: **65 – 60**
+* 09: **60 – 55**
+* 10: **55 – 50**
 
 Within each range, multiple thresholds are swept and evaluated.
 
