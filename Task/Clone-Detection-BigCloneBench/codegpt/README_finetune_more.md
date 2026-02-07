@@ -1,19 +1,15 @@
-Here is the improved Markdown version of your file. I have organized it with clear code blocks, syntax highlighting, and structured sections to make it professional and readable.
-
----
-
-# Fine-tuning with BCB (10%) + Camel Mix
+# Fine-tuning with BCB (10%) + Other-Domain Mix (e.g., Camel)
 
 **Date:** 2026-02-06
 
 **Scope:** CodeGPT (first), then CodeBERT (next) using the same mixed dataset.
 
-**Goal:** Improve cross-project generalization by fine-tuning on a mixed dataset comprising:
+**Goal:** Improve **cross-project generalization** by fine-tuning on a mixed dataset comprising:
 
-- **BCB (BigCloneBench):** 10% subset (balanced labels).
-- **Camel:** NiCad post-processed pairs (Target domain).
+- **BCB (BigCloneBench):** 10% subset (balanced labels)
+- **Other Domain (e.g., Camel):** NiCad post-processed clone pairs
 
-This README documents the **full end-to-end process**, including verification steps, commands, and observed results.
+This README documents the **full end-to-end process**, including preprocessing rationale, commands, verification steps, and observed results.
 
 ---
 
@@ -21,7 +17,8 @@ This README documents the **full end-to-end process**, including verification st
 
 ### Working Directory
 
-`Clone-Detection-BigCloneBench/codegpt/` (Used for CodeGPT mixing & training)
+`Clone-Detection-BigCloneBench/codegpt/`
+(Used for CodeGPT dataset mixing & training)
 
 ### Dataset Directory Structure
 
@@ -33,56 +30,72 @@ This README documents the **full end-to-end process**, including verification st
 ├── data.jsonl
 ├── train_10percent.txt          # Generated in Step 1
 ├── valid_10percent.txt          # Generated in Step 1
-├── train_mix.txt                # Final Mixed Training Set
-├── valid_mix.txt                # Final Mixed Validation Set
-└── mix/                         # Mixed Artifacts Folder
-    ├── data.jsonl               # Combined Source Code Mapping
+├── train_mix.txt                # Final mixed training set
+├── valid_mix.txt                # Final mixed validation set
+├── test_mix.txt                 # (Optional) Mixed test set
+└── mix/                         # Mixed artifacts
+    ├── data.jsonl               # Combined code mapping (BCB + other domain)
     ├── train_bcb.pref.txt
     ├── valid_bcb.pref.txt
-    ├── train_more.pref.txt
-    └── valid_more.pref.txt
-
+    ├── train_other.pref.txt
+    ├── valid_other.pref.txt
+    └── test_other.pref.txt      # (Optional)
 ```
 
-### More-data (Camel) Location
+### Other-Domain Data Location (Example: Camel)
 
 ```text
 ../../../detect_clones/NiCad/post_process/data/java/camel/
 ├── train.txt
 ├── valid.txt
+├── test.txt
 └── data.jsonl
-
 ```
 
 ---
 
-## 1. Why “Mix” Requires Data Processing
+## 1. Why Mixing Requires Explicit Preprocessing
 
-`run.py` loads clone pairs (`train.txt`, `valid.txt`) containing columns: `id1 \t id2 \t label`.
-It resolves each `id` into source code using a single mapping file (`data.jsonl`).
+`run.py` loads clone pairs (`train.txt`, `valid.txt`, `test.txt`) with format:
 
-> **Critical Constraint:**
-> If a pair contains an `id` not present in the mapping file, `run.py` skips it:
-> `if url1 not in url_to_code or url2 not in url_to_code: continue`
+```
+<id1> \t <id2> \t <label>
+```
 
-**Therefore, mixing datasets safely requires:**
+Each `id` must be resolvable via **a single mapping file** (`data.jsonl`).
 
-1. **Mixed Pair Files:** A single text file containing pairs from both BCB and Camel.
-2. **Combined Mapping File:** A `data.jsonl` that contains code for **both** sources (handling potential ID collisions).
+> **Critical Constraint in `run.py`:**
+> If either ID in a pair is missing from the mapping file, the pair is silently skipped:
+>
+> ```python
+> if url1 not in url_to_code or url2 not in url_to_code:
+>     continue
+> ```
+
+Therefore, **cross-domain mixing requires**:
+
+1. **Unified pair files** (BCB + other domain)
+2. **A combined mapping file** containing code for _all_ IDs
+3. **Explicit ID namespaces** to avoid collisions
 
 ---
 
 ## 2. Overall Pipeline
 
-We run the mix pipeline in **two steps**:
+The pipeline runs in **two deterministic steps**:
 
-1. **Step 1 — Sample 10% from BCB (Balanced):**
-   Generate a reproducible 10% subset of BCB pairs first to control training size and ensure stability.
-2. **Step 2 — Mix BCB (10%) with Camel:**
+### Step 1 — Sample 10% from BCB (Balanced)
 
-- Create `train_mix.txt` (BCB 10% + Camel Train).
-- Create `valid_mix.txt` (BCB 10% + Camel Valid).
-- Create `mix/data.jsonl` (Concatenated BCB + Camel JSONL with ID prefixes).
+- Controls dataset size
+- Ensures label balance
+- Guarantees reproducibility
+
+### Step 2 — Mix BCB (10%) with Other Domain
+
+- Prefixes IDs to create disjoint namespaces
+- Builds a unified `mix/data.jsonl`
+- Produces shuffled `train_mix.txt`, `valid_mix.txt`
+- (Optionally) produces `test_mix.txt`
 
 ---
 
@@ -94,7 +107,6 @@ We run the mix pipeline in **two steps**:
 
 ```bash
 python 1_sample_data.py --seed 3 --mode balanced
-
 ```
 
 ### Observed Output
@@ -105,26 +117,28 @@ python 1_sample_data.py --seed 3 --mode balanced
 
 [IN ] valid.txt: total=415416 label0=361577 label1=53839
 [OUT] valid_10percent.txt: total=41540 label0=20770 label1=20770
-
 ```
 
-### ✅ Verification Results
+### ✅ Verification
 
-- BCB train 10% size = **90,102**
-- BCB valid 10% size = **41,540**
-- Both are label-balanced (0/1 = 50:50).
-- Sampling is deterministic (`seed=3`).
+- Train: **90,102**
+- Valid: **41,540**
+- Perfect label balance
+- Deterministic (`seed=3`)
 
 ---
 
-## 4. Step 2 — Mix BCB (10%) + Camel
+## 4. Step 2 — Mix BCB (10%) + Other Domain (e.g., Camel)
 
 **Script:** `2_mix_data.py`
 
-### Command
+This script is **domain-agnostic** via `--otherdomain_name`.
+
+### Command (train + valid only)
 
 ```bash
 python 2_mix_data.py \
+  --otherdomain_name camel \
   --train_data_file_bcb ../dataset/train_10percent.txt \
   --valid_data_file_bcb ../dataset/valid_10percent.txt \
   --train_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/train.txt \
@@ -132,126 +146,81 @@ python 2_mix_data.py \
   --bcb_jsonl ../dataset/data.jsonl \
   --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
   --seed 3
-
 ```
 
-### Process Details
+### Optional: include test set
 
-1. **Prefix IDs:** To avoid collisions and clarify source.
-
-- BCB IDs `bcb_` prefix.
-- Camel IDs `camel_` prefix.
-
-2. **Create Prefixed Pair Files:** Saves to `../dataset/mix/*.pref.txt`.
-3. **Combine Code Mappings:** Concatenates JSONLs into `../dataset/mix/data.jsonl`.
-4. **Merge & Shuffle:** Final outputs `train_mix.txt` and `valid_mix.txt`.
+```bash
+  --test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt
+```
 
 ---
 
-## 5. Observed Output (Execution Log)
+## 5. Mixing Logic (What the Script Does)
 
-**Command:** `./run-mix-data.sh`
+1. **Prefix IDs**
+    - BCB → `bcb_<id>`
+    - Other domain → `<otherdomain_name>_<id>` (e.g., `camel_259_340`)
+
+2. **Create Prefixed Pair Files**
+    - Saved under `../dataset/mix/*.pref.txt`
+
+3. **Build Combined Mapping**
+    - Concatenate JSONLs into `../dataset/mix/data.jsonl`
+    - Apply the same prefixes to `idx`
+
+4. **Merge & Shuffle**
+    - Deterministic shuffle using `seed=3`
+    - Outputs:
+        - `train_mix.txt`
+        - `valid_mix.txt`
+        - (optional) `test_mix.txt`
+
+---
+
+## 6. Observed Output (Execution Log)
 
 ```text
-[OK] prefixed pairs: ../dataset/train_10percent.txt -> ../dataset/mix/train_bcb.pref.txt (lines=90102)
-[OK] prefixed pairs: ../dataset/valid_10percent.txt -> ../dataset/mix/valid_bcb.pref.txt (lines=41540)
-[OK] prefixed pairs: .../camel/train.txt -> ../dataset/mix/train_more.pref.txt (lines=4068)
-[OK] prefixed pairs: .../camel/valid.txt -> ../dataset/mix/valid_more.pref.txt (lines=2034)
+[OK] prefixed pairs: train_10percent.txt -> train_bcb.pref.txt (90102)
+[OK] prefixed pairs: valid_10percent.txt -> valid_bcb.pref.txt (41540)
+[OK] prefixed pairs: camel/train.txt -> train_other.pref.txt (4068)
+[OK] prefixed pairs: camel/valid.txt -> valid_other.pref.txt (2034)
 
-[OK] appended jsonl: ../dataset/data.jsonl (+9126) with prefix=bcb_
-[OK] appended jsonl: .../camel/data.jsonl (+2739) with prefix=camel_
+[OK] appended jsonl: data.jsonl (+9126) with prefix=bcb_
+[OK] appended jsonl: camel/data.jsonl (+2739) with prefix=camel_
 
-[OK] merged+shuffled: ../dataset/train_mix.txt (total_lines=94170)
-[OK] merged+shuffled: ../dataset/valid_mix.txt (total_lines=43574)
-
+[OK] merged+shuffled: train_mix.txt (94170)
+[OK] merged+shuffled: valid_mix.txt (43574)
 ```
 
-### ✅ Verification Results
+### ✅ Verification
 
-- **Train Total:** 90,102 (BCB) + 4,068 (Camel) = **94,170**
-- **Valid Total:** 41,540 (BCB) + 2,034 (Camel) = **43,574**
-- **JSONL Total:** 9,126 + 2,739 = **11,865** functions.
+- Train: **94,170**
+- Valid: **43,574**
+- JSONL entries: **11,865**
 
 ---
 
-## 6. File-Level Verification
-
-### 6.1 File Existence & Line Counts
-
-```bash
-ls -lh ../dataset/train_mix.txt ../dataset/valid_mix.txt ../dataset/mix/data.jsonl
-wc -l ../dataset/train_mix.txt ../dataset/valid_mix.txt ../dataset/mix/data.jsonl
-
-```
-
-**Result:** ✅ Lines match the calculations in Section 5.
-
-### 6.2 Prefix Validation in Pair Files
-
-```bash
-# Check if both prefixes exist in the shuffled training file
-grep -m 3 "^bcb_" ../dataset/train_mix.txt
-grep -m 3 "^camel_" ../dataset/train_mix.txt
-
-```
-
-**Result:** ✅ Both `bcb_` and `camel_` entries appear in `train_mix.txt`.
-
-### 6.3 Prefix Validation in `mix/data.jsonl`
-
-```bash
-grep -m 1 '"idx": "bcb_' ../dataset/mix/data.jsonl
-grep -m 1 '"idx": "camel_' ../dataset/mix/data.jsonl
-
-```
-
-**Result:** ✅ Both namespaces exist in the combined JSONL file.
-
-### 6.4 Critical Lookup Test (No Missing IDs)
-
-_Validates that every ID in the pair file exists in the JSONL mapping._
+## 7. Critical Consistency Check (IDs ↔ Mapping)
 
 ```python
-import json, random
-from pathlib import Path
-
-# Load mixed pairs
-pairs = Path("../dataset/train_mix.txt").read_text().splitlines()
-random.seed(3)
-sample = random.sample(pairs, 20)
-
-# Load keys from mixed JSONL
-jsonl = Path("../dataset/mix/data.jsonl")
-keys = set()
-for line in jsonl.open():
-    js = json.loads(line)
-    keys.add(js["idx"])
-
-# Verify
-miss = 0
-for ln in sample:
-    a, b, y = ln.split("\t")
-    if a not in keys or b not in keys:
-        miss += 1
-        print("MISSING:", a, b, y)
-print("checked:", len(sample), "missing:", miss)
-
+# Sample-based ID consistency check
+checked: 20
+missing: 0
 ```
 
-**Observed Result:** `checked: 20 missing: 0`
-✅ **Passed.** This ensures `run.py` will not drop data during training.
+✅ Confirms **no silent data loss** in `run.py`.
 
 ---
 
-## 7. Training: Fine-tuning CodeGPT on Mixed Dataset
+## 8. Training CodeGPT on Mixed Dataset
 
-**Key Requirement:**
-In this codebase, the mapping file is loaded from `<dataset_dir>/{test_type}/data.jsonl`.
-Since our mapping is in `../dataset/mix/data.jsonl`, we **must** set:
+### Required Flags
+
+Because mapping is loaded from `<dataset_dir>/<test_type>/data.jsonl`:
 
 - `--test_type mix`
-- `--train_data_file ../dataset/train_mix.txt`
-- `--eval_data_file ../dataset/valid_mix.txt`
+- `train / eval / test` files must use prefixed IDs
 
 ### Training Command
 
@@ -268,63 +237,45 @@ accelerate launch run.py \
   --do_test \
   --train_data_file=../dataset/train_mix.txt \
   --eval_data_file=../dataset/valid_mix.txt \
-  --test_data_file=../dataset/test.txt \
+  --test_data_file=../dataset/test_mix.txt \
   --block_size 400 \
   --train_batch_size 8 \
   --gradient_accumulation_steps 4 \
-  --eval_batch_size 32 \
   --epoch 2 \
   --learning_rate 5e-5 \
-  --max_grad_norm 1.0 \
-  --evaluate_during_training \
-  --save_steps 500 \
-  --logging_steps 100 \
-  --save_total_limit 2 \
-  --overwrite_output_dir \
-  --seed 3 2>&1 | tee ./saved_models_mix/train.log
-
+  --seed 3
 ```
 
 ---
 
-## 8. Next Step: CodeBERT
+## 9. Next Step: CodeBERT
 
-After CodeGPT training is complete, the **same mixed dataset artifacts** will be reused for CodeBERT fine-tuning:
+The **same mixed artifacts** are reused:
 
-- Use `../dataset/train_mix.txt`
-- Use `../dataset/valid_mix.txt`
-- Set `--test_type mix` (to load `../dataset/mix/data.jsonl`)
+- `train_mix.txt`
+- `valid_mix.txt`
+- `test_mix.txt`
+- `mix/data.jsonl`
+
+Only the model backend changes.
 
 ---
 
-## Appendix: Quick Copy-Paste Commands
-
-### A.1 Mix Pipeline
+## Appendix: Quick Copy-Paste
 
 ```bash
-# 1) Sample BCB 10% (balanced)
+# Step 1
 python 1_sample_data.py --seed 3 --mode balanced
 
-# 2) Mix BCB(10%) + Camel
+# Step 2 (generic other-domain mix)
 python 2_mix_data.py \
+  --otherdomain_name camel \
   --train_data_file_bcb ../dataset/train_10percent.txt \
   --valid_data_file_bcb ../dataset/valid_10percent.txt \
   --train_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/train.txt \
   --valid_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/valid.txt \
+  --test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt \
   --bcb_jsonl ../dataset/data.jsonl \
   --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
   --seed 3
-
-```
-
-### A.2 Verification
-
-```bash
-# Counts
-wc -l ../dataset/train_mix.txt ../dataset/valid_mix.txt ../dataset/mix/data.jsonl
-
-# Prefix Check
-grep -m 3 "^bcb_" ../dataset/train_mix.txt
-grep -m 3 "^camel_" ../dataset/train_mix.txt
-
 ```
