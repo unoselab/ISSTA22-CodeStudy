@@ -19,4 +19,4 @@ python run.py \
   --learning_rate 5e-5 \
   --max_grad_norm 1.0 \
   --evaluate_during_training \
-  --seed 3 2>&1 | tee ./saved_models/train.log
+  --seed 3 2>&1 | tee ./saved_models/test.log
