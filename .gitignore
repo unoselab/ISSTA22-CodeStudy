@@ -58,4 +58,21 @@ output/
 # --- IDE Settings ---
 node_modules
 /drag_refactor/out
-/refactor_server_client/workspace/.metadata
+.metadata
+
+# macOS app bundle / embedded Eclipse installation
+Eclipse.app/
+**/Eclipse.app/
+
+# Eclipse IDE project-local files
+.project
+.classpath
+.settings/
+
+# Optional macOS noise
+.DS_Store
+
+# Build output
+bin/
+out/
+target/
