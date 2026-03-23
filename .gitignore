@@ -58,3 +58,4 @@ output/
 # --- IDE Settings ---
 node_modules
 /drag_refactor/out
+/refactor_server_client/workspace/.metadata
