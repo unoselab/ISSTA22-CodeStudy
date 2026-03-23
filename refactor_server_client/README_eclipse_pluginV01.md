@@ -21,7 +21,7 @@ This serves as the initial bridge for sending and receiving code analysis data (
 4. On the Content page, ensure "Generate an activator" is checked.
 5. Uncheck "Create a plug-in using one of the templates" to create a clean, manual configuration. Click **Finish**.
 
-![Screenshot: New Plug-in Project Wizard](./images/New%20Plug-in%20Project%20Wizard.png)
+![Screenshot: New Plug-in Project Wizard](./images/New%20Plug-in%20Project%20Wizard.jpg)
 
 ---
 
@@ -37,7 +37,7 @@ To access the Eclipse UI components and commands, we must add specific dependenc
 4. Navigate to the **Overview** tab.
 5. Under **Execution Environments**, ensure it is set to `JavaSE-11` or higher (e.g., `JavaSE-21`).
 
-_[Screenshot Placeholder: MANIFEST.MF Dependencies Tab]_
+_![Screenshot: MANIFEST.MF Dependencies Tab](./images/MANIFEST.MF%20Dependencies%20Tab.jpg)_
 
 ---
 
@@ -83,7 +83,7 @@ Eclipse uses `plugin.xml` to define UI elements like menus and commands without 
 </plugin>
 ```
 
-_[Screenshot Placeholder: plugin.xml Source View]_
+_![Screenshot: plugin.xml Source View](./images/plugin.xml%20Source%20View.jpg)_
 
 ---
 
@@ -146,7 +146,7 @@ public class FetchDjangoHandler extends AbstractHandler {
 }
 ```
 
-_[Screenshot Placeholder: FetchDjangoHandler.java code]_
+_![Screenshot: FetchDjangoHandler.java code](./images/FetchDjangoHandler.java%20code.jpg)_
 
 ---
 
@@ -159,11 +159,13 @@ To test the plug-in inside a sandboxed Eclipse environment:
 3. In the new Eclipse window, locate the **Django API** menu in the top menu bar.
 4. Click **Fetch Django JSON**.
 
-_[Screenshot Placeholder: Eclipse Run Configurations Dialog]_
+_![Screenshot: Eclipse Run Configurations Dialog](./images/Eclipse%20Run%20Configurations%20Dialog.jpg)_
 
 ### Expected Output
 
 If the Django server is running correctly, a popup dialog will appear displaying a `200` status code and the successful JSON payload.
 
-_[Screenshot Placeholder: Final Output - The Native Eclipse Popup displaying the JSON]_
+_![Screenshot: Final Output - The Native Eclipse Popup displaying the JSON](./images/Final%20Output%20-%20The%20Native%20Eclipse%20Popup%20displaying%20the%20JSON1.jpg)_
+
+_![Screenshot: Final Output - The Native Eclipse Popup displaying the JSON](./images/Final%20Output%20-%20The%20Native%20Eclipse%20Popup%20displaying%20the%20JSON2.jpg)_
 
