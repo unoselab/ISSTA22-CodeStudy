@@ -29,4 +29,7 @@
       </menuContribution>
    </extension>
 
+   <extension point="org.eclipse.ui.startup">
+      <startup class="refactor_plugin.listeners.EditorDropStartup"/>
+   </extension>
 </plugin>
