@@ -59,3 +59,21 @@ NiCad-py-block/
 # --- IDE Settings ---
 node_modules
 /drag_refactor/out
+.metadata
+
+# macOS app bundle / embedded Eclipse installation
+Eclipse.app/
+**/Eclipse.app/
+
+# Eclipse IDE project-local files
+.project
+.classpath
+.settings/
+
+# Optional macOS noise
+.DS_Store
+
+# Build output
+bin/
+out/
+target/
