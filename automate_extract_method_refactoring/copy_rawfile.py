@@ -1,8 +1,8 @@
 import json, os, shutil
 
-json_path = "/home/user1-system11/research_dream/llm-clone/automate_extract_method_refactoring/data/sampled_42pairs_refactored_ inconsistently.json"
+json_path = "/home/user1-system11/research_dream/llm-clone/automate_extract_method_refactoring/data/sampled_java_pairs_refactored_true_20.json"
 src_root = "/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad/systems"
-dst_root = "/home/user1-system11/research_dream/llm-clone/automate_extract_method_refactoring/data/systems"
+dst_root = "/home/user1-system11/research_dream/llm-clone/automate_extract_method_refactoring/systems"
 
 with open(json_path, "r", encoding="utf-8") as f:
     data = json.load(f)
