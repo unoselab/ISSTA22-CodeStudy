@@ -2,7 +2,7 @@
 
 A VS Code extension that visualizes code clones as an interactive tree and lets you apply **Extract Method** refactoring directly from the editor — either by clicking a node or by dragging the clone in the file.
 
-![Clone tree screenshot](images/clone_tree_screenshot1.jpg)
+![Clone tree screenshot](images/clone_tree_screenshot1.png)
 
 ---
 
