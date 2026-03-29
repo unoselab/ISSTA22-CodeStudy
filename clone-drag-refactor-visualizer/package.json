@@ -12,10 +12,72 @@
   "activationEvents": [],
   "main": "./dist/extension_clone_viz.js",
   "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "dragDropZone",
+          "name": "Refactoring Drop Zone"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "clone-visualizer.show_code_clones",
         "title": "Show Code Clones"
+      },
+      {
+        "command": "dragDropZone.addSnippet",
+        "title": "Add to Dropzone"
+      },
+      {
+        "command": "dragDropZone.removeSnippet",
+        "title": "Remove from Dropzone",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "dragDropZone.removeSelected",
+        "title": "Remove Selected from Dropzone"
+      },
+      {
+        "command": "dragDropZone.clearDropzone",
+        "title": "Clear Dropzone",
+        "icon": "$(clear-all)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "dragDropZone.addSnippet",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "dragDropZone.removeSnippet",
+          "when": "view == dragDropZone && viewItem == dropzoneSnippet",
+          "group": "1_modification"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "dragDropZone.clearDropzone",
+          "when": "view == dragDropZone",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "dragDropZone.addSnippet",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "dragDropZone.removeSelected",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "view == dragDropZone && listFocus && !inputFocus"
       }
     ]
   },
