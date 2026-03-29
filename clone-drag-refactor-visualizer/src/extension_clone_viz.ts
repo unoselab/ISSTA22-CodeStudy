@@ -198,10 +198,440 @@ async function applyPrecomputedRefactoring(
     return vscode.workspace.applyEdit(edit);
 }
 
+// ── Dropzone sidebar ──────────────────────────────────────────────────────────
+
+/**
+ * Represents a single snippet item within the Dropzone sidebar.
+ */
+class DropItem extends vscode.TreeItem {
+    constructor(public readonly label: string, public readonly content: string) {
+        super(label, vscode.TreeItemCollapsibleState.None);
+        this.tooltip = content;
+        this.description = '';
+        this.contextValue = 'dropzoneSnippet';
+    }
+}
+
+/**
+ * Provides the data for the Dropzone TreeView and handles drag/drop interactions
+ * originating from the sidebar panel.
+ */
+class DropzoneProvider implements vscode.TreeDataProvider<DropItem>, vscode.TreeDragAndDropController<DropItem> {
+    private dropItems: DropItem[] = [];
+
+    private _onDidChangeTreeData = new vscode.EventEmitter<DropItem | undefined | void>();
+    readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+    // Accept broad editor/OS types; VS Code normalises keys to lowercase before matching.
+    dropMimeTypes = [
+        'text/plain',
+        'text/html',
+        'text/uri-list',
+        'text/x-moz-url',
+        'downloadurl',
+        'resourceurls',
+        'files',
+        'public.utf8-plain-text',
+        'public.plain-text',
+    ];
+    dragMimeTypes = ['text/plain'];
+
+    getTreeItem(element: DropItem): vscode.TreeItem { return element; }
+
+    getChildren(element?: DropItem): vscode.ProviderResult<DropItem[]> {
+        return element ? [] : this.dropItems;
+    }
+
+    public addSnippet(textContent: string): void {
+        const label = textContent.trim().substring(0, 20).replace(/\n/g, ' ') + '...';
+        this.dropItems.push(new DropItem(label, textContent));
+        this._onDidChangeTreeData.fire();
+    }
+
+    public removeItem(item: DropItem): boolean {
+        const i = this.dropItems.indexOf(item);
+        if (i < 0) { return false; }
+        this.dropItems.splice(i, 1);
+        this._onDidChangeTreeData.fire();
+        return true;
+    }
+
+    public clear(): boolean {
+        if (this.dropItems.length === 0) { return false; }
+        this.dropItems.length = 0;
+        this._onDidChangeTreeData.fire();
+        return true;
+    }
+
+    async handleDrop(_target: DropItem | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+        if (token.isCancellationRequested) { return; }
+
+        let content = await this.readDroppedText(dataTransfer, token);
+        if (!content?.trim()) { content = await this.readSnippetFromEditorUriList(dataTransfer, token); }
+        if (!content?.trim()) { content = await this.readSnippetFromDownloadUrl(dataTransfer, token); }
+        if (!content?.trim()) {
+            vscode.window.showWarningMessage(
+                'Dropzone could not read that drag. Use ⌘⇧R / Ctrl+Shift+R with a selection, or copy text and run "Add to Dropzone".'
+            );
+            return;
+        }
+        this.addSnippet(content);
+        vscode.window.showInformationMessage('Added to Dropzone (drag).');
+    }
+
+    private async readDroppedText(dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<string | undefined> {
+        let best: string | undefined;
+        const consider = async (mimeType: string, item: vscode.DataTransferItem) => {
+            if (token.isCancellationRequested) { return; }
+            const mt = mimeType.toLowerCase();
+            if (mt.startsWith('application/vnd.code.tree.') || mt === 'text/uri-list' || mt === 'downloadurl') { return; }
+            let s: string | undefined;
+            try { s = await item.asString(); } catch { s = typeof item.value === 'string' ? item.value : undefined; }
+            if (!s?.trim()) { return; }
+            if (mt === 'text/plain' || mt === 'public.utf8-plain-text' || mt === 'public.plain-text') { best = s; return; }
+            if (!best || s.trim().length > best.trim().length) { best = s; }
+        };
+
+        const plain = dataTransfer.get('text/plain');
+        if (plain) {
+            await consider('text/plain', plain);
+            if (best) { return best; }
+        }
+        for (const [mimeType, item] of dataTransfer) {
+            if (token.isCancellationRequested) { break; }
+            await consider(mimeType, item);
+        }
+        return best;
+    }
+
+    private async readSnippetFromEditorUriList(dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<string | undefined> {
+        const items: vscode.DataTransferItem[] = [];
+        for (const [mime, item] of dataTransfer) {
+            if (mime.toLowerCase() === 'text/uri-list') { items.push(item); }
+        }
+        for (const item of items) {
+            if (token.isCancellationRequested) { return undefined; }
+            let raw: string | undefined;
+            try { raw = await item.asString(); } catch { raw = typeof item.value === 'string' ? item.value : undefined; }
+            if (!raw?.trim()) { continue; }
+            const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+            for (const line of lines) {
+                const text = await this.snippetFromUriListLine(line, token);
+                if (text?.trim()) { return text; }
+            }
+        }
+        return undefined;
+    }
+
+    private async readSnippetFromDownloadUrl(dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<string | undefined> {
+        const item = dataTransfer.get('downloadurl');
+        if (!item) { return undefined; }
+        let raw: string | undefined;
+        try { raw = await item.asString(); } catch { raw = typeof item.value === 'string' ? item.value : undefined; }
+        if (!raw) { return undefined; }
+        const a = raw.indexOf(':');
+        const b = a >= 0 ? raw.indexOf(':', a + 1) : -1;
+        if (b < 0) { return undefined; }
+        return this.snippetFromUriListLine(raw.slice(b + 1).trim(), token);
+    }
+
+    private async snippetFromUriListLine(line: string, token: vscode.CancellationToken): Promise<string | undefined> {
+        let uri: vscode.Uri;
+        try { uri = vscode.Uri.parse(line, true); } catch {
+            try { uri = vscode.Uri.file(line); } catch { return undefined; }
+        }
+        if (token.isCancellationRequested) { return undefined; }
+
+        const fragRaw = uri.fragment;
+        let frag = fragRaw;
+        try { frag = decodeURIComponent(fragRaw); } catch { /* keep raw */ }
+
+        const parsed = DropzoneProvider.parseLinkFragment(frag);
+        const clean = uri.with({ fragment: '' });
+        const docFromBuffer = DropzoneProvider.findOpenDocument(clean);
+
+        if (docFromBuffer) {
+            if (!parsed) {
+                const ed = vscode.window.visibleTextEditors.find(e => e.document === docFromBuffer);
+                if (ed && !ed.selection.isEmpty) { return ed.document.getText(ed.selection); }
+                return DropzoneProvider.textFromEditorSelectionForUri(clean);
+            }
+            return docFromBuffer.getText(DropzoneProvider.rangeForOpenDocument(docFromBuffer, parsed));
+        }
+        if (!parsed) { return DropzoneProvider.textFromEditorSelectionForUri(clean); }
+        try {
+            const doc = await vscode.workspace.openTextDocument(clean);
+            return doc.getText(DropzoneProvider.rangeForOpenDocument(doc, parsed));
+        } catch { return DropzoneProvider.textFromEditorSelectionForUri(clean); }
+    }
+
+    private static findOpenDocument(clean: vscode.Uri): vscode.TextDocument | undefined {
+        return vscode.workspace.textDocuments.find(d =>
+            d.uri.toString() === clean.toString() ||
+            (d.uri.scheme === 'file' && clean.scheme === 'file' && d.uri.fsPath === clean.fsPath)
+        );
+    }
+
+    private static textFromEditorSelectionForUri(clean: vscode.Uri): string | undefined {
+        const active = vscode.window.activeTextEditor;
+        if (!active || active.selection.isEmpty) { return undefined; }
+        const du = active.document.uri;
+        if (du.toString() === clean.toString() || (du.scheme === 'file' && clean.scheme === 'file' && du.fsPath === clean.fsPath)) {
+            return active.document.getText(active.selection);
+        }
+        return undefined;
+    }
+
+    private static parseLinkFragment(fragment: string):
+        | { kind: 'wholeLine'; line1: number }
+        | { kind: 'range'; startLine1: number; startCol1: number; endLine1: number; endCol1?: number }
+        | undefined {
+        const match = /^L?(\d+)(?:,(\d+))?(-L?(\d+)(?:,(\d+))?)?/.exec(fragment);
+        if (!match) { return undefined; }
+        const startLine = parseInt(match[1], 10);
+        const startCol  = match[2] ? parseInt(match[2], 10) : 1;
+        if (!match[4]) { return { kind: 'wholeLine', line1: startLine }; }
+        const endLine = parseInt(match[4], 10);
+        const endCol  = match[5] ? parseInt(match[5], 10) : undefined;
+        return { kind: 'range', startLine1: startLine, startCol1: startCol, endLine1: endLine, endCol1: endCol };
+    }
+
+    private static rangeForOpenDocument(
+        doc: vscode.TextDocument,
+        parsed: Exclude<ReturnType<typeof DropzoneProvider.parseLinkFragment>, undefined>
+    ): vscode.Range {
+        if (parsed.kind === 'wholeLine') {
+            const lineIdx = Math.min(Math.max(0, parsed.line1 - 1), doc.lineCount - 1);
+            return doc.lineAt(lineIdx).range;
+        }
+        const sl = Math.min(Math.max(0, parsed.startLine1 - 1), doc.lineCount - 1);
+        const el = Math.min(Math.max(0, parsed.endLine1 - 1), doc.lineCount - 1);
+        const startLineDoc = doc.lineAt(sl);
+        const endLineDoc   = doc.lineAt(el);
+        const startChar = Math.min(Math.max(0, parsed.startCol1 - 1), startLineDoc.text.length);
+        const endChar   = parsed.endCol1 !== undefined
+            ? Math.min(Math.max(0, parsed.endCol1 - 1), endLineDoc.text.length)
+            : endLineDoc.text.length;
+        return new vscode.Range(new vscode.Position(sl, startChar), new vscode.Position(el, endChar));
+    }
+
+    async handleDrag(source: readonly DropItem[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+        if (source.length === 0 || token.isCancellationRequested) { return; }
+        const draggedItem = source[0];
+        dataTransfer.set('text/plain', new vscode.DataTransferItem(draggedItem.content));
+        dataTransfer.set('application/vnd.drag.dropzone', new vscode.DataTransferItem(draggedItem.content));
+    }
+}
+
+// ── Wrap helper ───────────────────────────────────────────────────────────────
+
+/**
+ * Strips the common leading whitespace from all non-empty lines of `body`,
+ * then re-indents each line with `bodyIndent`.
+ */
+function normalizeBodyLines(body: string, bodyIndent: string): string[] {
+    const lines = body.split('\n');
+    // Drop trailing blank lines
+    while (lines.length > 0 && lines[lines.length - 1].trim() === '') { lines.pop(); }
+    const nonEmpty = lines.filter(l => l.trim().length > 0);
+    const minIndent = nonEmpty.length === 0
+        ? 0
+        : Math.min(...nonEmpty.map(l => (/^(\s*)/.exec(l)![1].length)));
+    return lines.map(l => bodyIndent + l.slice(minIndent));
+}
+
+/**
+ * Wraps `body` inside a method/function definition appropriate for the given language.
+ * `outerIndent` is the leading whitespace of the line where the user dropped the snippet.
+ */
+function wrapInMethod(body: string, methodName: string, lang: string, outerIndent: string): string {
+    const step = '    ';
+    const bodyIndent = outerIndent + step;
+    const bodyLines = normalizeBodyLines(body, bodyIndent);
+
+    if (lang === 'python') {
+        // Python uses indentation instead of braces
+        return `${outerIndent}def ${methodName}():\n${bodyLines.join('\n')}`;
+    }
+
+    const header = lang === 'java'
+        ? `private void ${methodName}()`
+        : `function ${methodName}()`;   // TypeScript / JavaScript / fallback
+
+    return `${outerIndent}${header} {\n${bodyLines.join('\n')}\n${outerIndent}}`;
+}
+
+/**
+ * Returns the leading-whitespace indentation to use for the generated method.
+ * Prefers the drop-position line; falls back to the nearest preceding non-blank line.
+ */
+function indentAtDropPosition(document: vscode.TextDocument, position: vscode.Position): string {
+    const tryLine = (lineIdx: number): string | undefined => {
+        if (lineIdx < 0 || lineIdx >= document.lineCount) { return undefined; }
+        const text = document.lineAt(lineIdx).text;
+        const m = /^(\s*)/.exec(text);
+        return m ? m[1] : '';
+    };
+
+    const dropLineIndent = tryLine(position.line) ?? '';
+    if (dropLineIndent.length > 0) { return dropLineIndent; }
+
+    // Drop line is empty — walk backwards to find a non-blank line
+    for (let i = position.line - 1; i >= 0; i--) {
+        const text = document.lineAt(i).text;
+        if (text.trim().length > 0) {
+            return (/^(\s*)/.exec(text)![1]);
+        }
+    }
+    return '';
+}
+
+// ── EditorDropProvider ────────────────────────────────────────────────────────
+
+/**
+ * Intercepts items dropped from the Dropzone sidebar into a text editor.
+ *
+ * Two paths:
+ *  1. Clone-aware  — file was opened from the clone tree → apply the pre-computed
+ *     two-clone "Extract Method" refactoring (both sites updated at once).
+ *  2. Generic      — no clone context → prompt for a name and insert the snippet
+ *     wrapped in a language-appropriate function definition.
+ */
+class EditorDropProvider implements vscode.DocumentDropEditProvider {
+    constructor(
+        private readonly lastOpenedByFile: Map<string, string>,
+        private readonly recordMap: Map<string, CloneRecord>
+    ) {}
+
+    async provideDocumentDropEdits(
+        document: vscode.TextDocument,
+        position: vscode.Position,
+        dataTransfer: vscode.DataTransfer,
+        token: vscode.CancellationToken
+    ): Promise<vscode.DocumentDropEdit | undefined> {
+        const dropzoneItem = dataTransfer.get('application/vnd.drag.dropzone');
+        if (!dropzoneItem) { return undefined; }
+
+        const content = await dropzoneItem.asString();
+        if (!content?.trim()) { return undefined; }
+
+        // ── Path 1: clone-aware ──────────────────────────────────────────────
+        // The file was opened by clicking a source node in the clone tree,
+        // so we know which clone group it belongs to.
+        const classid = this.lastOpenedByFile.get(document.uri.fsPath);
+        const record  = classid ? this.recordMap.get(classid) : undefined;
+
+        if (record) {
+            const answer = await vscode.window.showWarningMessage(
+                `Apply "Extract Method" for clone group "${record.classid}"?`,
+                {
+                    modal: true,
+                    detail:
+                        `${record.sources.length} clone site(s) will be updated together.\n` +
+                        `Use Ctrl+Z / ⌘Z to undo.`,
+                },
+                'Apply'
+            );
+            if (answer !== 'Apply' || token.isCancellationRequested) { return undefined; }
+
+            // Let VS Code finish applying the no-op drop edit before the workspace edit runs.
+            setTimeout(async () => {
+                const freshDoc = await vscode.workspace.openTextDocument(document.uri);
+                const applied  = await applyPrecomputedRefactoring(freshDoc, record);
+                if (applied) {
+                    vscode.window.showInformationMessage(
+                        `Clone Visualizer: extract method applied for ${record.classid} ` +
+                        `— ${record.sources.length} clone site(s) updated.`
+                    );
+                }
+            }, 50);
+
+            // Return an empty edit so VS Code has nothing to insert at the drop point.
+            return new vscode.DocumentDropEdit('');
+        }
+
+        // ── Path 2: generic wrap ─────────────────────────────────────────────
+        // No clone context — just wrap the snippet in a new method definition.
+        const name = await vscode.window.showInputBox({
+            title: 'Wrap in Extracted Method',
+            prompt: 'Name for the method that will wrap the dropped snippet',
+            value: 'extractedMethod',
+            validateInput: (v) => (/^[a-zA-Z_$][\w$]*$/.test(v) ? undefined : 'Valid identifier'),
+        });
+
+        if (name === undefined || token.isCancellationRequested) { return undefined; }
+
+        const methodName  = name.trim() || 'extractedMethod';
+        const outerIndent = indentAtDropPosition(document, position);
+        const wrapped     = wrapInMethod(content, methodName, document.languageId, outerIndent);
+
+        vscode.window.showInformationMessage(`Snippet wrapped in ${methodName}() and inserted.`);
+        return new vscode.DocumentDropEdit(wrapped);
+    }
+}
+
 // ── Extension entry point ─────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "clone-visualizer" is now active!');
+
+    // ── Dropzone sidebar setup ────────────────────────────────────────────────
+    const dropzoneProvider = new DropzoneProvider();
+
+    const treeView = vscode.window.createTreeView('dragDropZone', {
+        treeDataProvider: dropzoneProvider,
+        dragAndDropController: dropzoneProvider,
+    });
+
+    const addSnippetCmd = vscode.commands.registerCommand('dragDropZone.addSnippet', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) { return; }
+        const text = editor.document.getText(editor.selection);
+        if (text) {
+            dropzoneProvider.addSnippet(text);
+            vscode.window.showInformationMessage('Added to Dropzone!');
+        } else {
+            vscode.window.showWarningMessage('Please highlight some text first.');
+        }
+    });
+
+    const removeSnippetCmd = vscode.commands.registerCommand('dragDropZone.removeSnippet', (item: DropItem) => {
+        if (!(item instanceof DropItem)) { return; }
+        if (dropzoneProvider.removeItem(item)) {
+            vscode.window.showInformationMessage('Removed from Dropzone.');
+        }
+    });
+
+    const removeSelectedCmd = vscode.commands.registerCommand('dragDropZone.removeSelected', () => {
+        const selected = treeView.selection;
+        let removed = 0;
+        for (const node of selected) {
+            if (node instanceof DropItem && dropzoneProvider.removeItem(node)) { removed++; }
+        }
+        if (removed > 0) {
+            vscode.window.showInformationMessage(
+                removed === 1 ? 'Removed from Dropzone.' : `Removed ${removed} snippets from Dropzone.`
+            );
+        }
+    });
+
+    const clearDropzoneCmd = vscode.commands.registerCommand('dragDropZone.clearDropzone', () => {
+        if (dropzoneProvider.clear()) { vscode.window.showInformationMessage('Dropzone cleared.'); }
+    });
+
+    // Shared maps: populated by show_code_clones, read by EditorDropProvider.
+    // key: absolute file path → classid of the clone group opened from the tree.
+    const lastOpenedByFile = new Map<string, string>();
+    // key: classid → CloneRecord (loaded from all_refactor_results.json on panel open).
+    const recordMap        = new Map<string, CloneRecord>();
+
+    const editorDropProvider = vscode.languages.registerDocumentDropEditProvider(
+        { language: '*' },
+        new EditorDropProvider(lastOpenedByFile, recordMap)
+    );
+
+    context.subscriptions.push(treeView, addSnippetCmd, removeSnippetCmd, removeSelectedCmd, clearDropzoneCmd, editorDropProvider);
+    // ── End Dropzone setup ────────────────────────────────────────────────────
 
     const log = vscode.window.createOutputChannel('Clone Visualizer — Drag Log');
     context.subscriptions.push(log);
@@ -226,11 +656,13 @@ export function activate(context: vscode.ExtensionContext) {
         htmlContent = htmlContent.replace('{{D3_URI}}', d3Uri.toString());
         panel.webview.html = htmlContent;
 
-        // 3. Parse all_refactor_results.json → D3 tree + lookup maps
+        // 3. Parse all_refactor_results.json → D3 tree + populate shared lookup maps
         const dataPath = path.join(context.extensionPath, 'media', 'all_refactor_results.json');
         const records: CloneRecord[] = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-        const recordMap  = new Map<string, CloneRecord>(records.map(r => [r.classid, r]));
-        const treeData   = parseCloneData(records);
+        // Populate the shared recordMap in-place so EditorDropProvider always sees current data.
+        recordMap.clear();
+        for (const r of records) { recordMap.set(r.classid, r); }
+        const treeData = parseCloneData(records);
 
         // 4. Send tree to webview
         setTimeout(() => {
@@ -276,10 +708,6 @@ export function activate(context: vscode.ExtensionContext) {
             context.subscriptions
         );
 
-        // Tracks the last leaf node opened via the tree — used by drag listener
-        // key: absolute file path  value: classid of the clone group
-        const lastOpenedByFile = new Map<string, string>();
-
         // 6. Editor drag listener — detect same-file drag, match body, apply refactoring
         let ignoreChangeUntil = 0;
 
@@ -293,8 +721,10 @@ export function activate(context: vscode.ExtensionContext) {
             const doc = event.document;
             const changes = event.contentChanges;
 
-            // ── Diagnostic log for every Java-file change ──────────────────
-            if (doc.languageId === 'java' || doc.fileName.endsWith('.java')) {
+            // ── Diagnostic log for every supported-language file change ───────
+            const isSupportedLang = ['java', 'python'].includes(doc.languageId) ||
+                doc.fileName.endsWith('.java') || doc.fileName.endsWith('.py');
+            if (isSupportedLang) {
                 log.appendLine(
                     `[drag] ${path.basename(doc.fileName)}  langId=${doc.languageId}` +
                     `  reason=${event.reason}  nChanges=${changes.length}`
@@ -308,7 +738,7 @@ export function activate(context: vscode.ExtensionContext) {
                 log.show(true);
             }
 
-            if (doc.languageId !== 'java' && !doc.fileName.endsWith('.java')) { return; }
+            if (!isSupportedLang) { return; }
 
             if (changes.length !== 2) {
                 log.appendLine(`  → SKIP: expected 2 changes, got ${changes.length}`);
