@@ -111,18 +111,6 @@ Drag any Dropzone item and drop it onto an open editor file. Two behaviours appl
 | File was opened by clicking a **blue leaf node** in the clone tree | **Clone-aware drop** — a confirmation dialog offers to apply the pre-computed Extract Method refactoring for the entire clone group. All clone sites are updated simultaneously (undoable with Ctrl+Z). |
 | Any other file | **Generic drop** — a prompt asks for a method name. The snippet is wrapped in a language-appropriate function definition and inserted at the drop position. |
 
-#### Language-aware method wrapping (generic drop)
-
-When wrapping a snippet in the generic path, the extension generates idiomatic syntax for the target file's language:
-
-| Language | Generated signature |
-|---|---|
-| Python | `def methodName():` |
-| Java | `private void methodName()` |
-| TypeScript / JavaScript (and others) | `function methodName()` |
-
-The body is re-indented to match the drop position and the common leading whitespace is normalised automatically.
-
 ---
 
 ## Project Structure
