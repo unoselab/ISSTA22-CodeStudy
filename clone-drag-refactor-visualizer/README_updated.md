@@ -1,6 +1,6 @@
 # Clone Drag Refactor Visualizer
 
-A VS Code extension that visualizes code clones as an interactive tree and lets you apply **Extract Method** refactoring directly from the editor — either by clicking a node or by dragging the clone in the file.
+A VS Code extension that visualizes code clones as an interactive tree and lets you apply **Extract Method** refactoring directly from the editor — either by clicking a node, by dragging the clone in the file, or by using the **Dropzone sidebar** to store and drop snippets into any editor.
 
 ![Clone tree screenshot](images/clone_tree_screenshot1.png)
 
@@ -70,7 +70,7 @@ A confirmation dialog appears listing the files that will be modified. Click **A
 
 ---
 
-### 4 — Apply Extract Method by dragging
+### 4 — Apply Extract Method by dragging (in-editor)
 
 This is the signature interaction of the extension:
 
@@ -81,6 +81,47 @@ This is the signature interaction of the extension:
 The extension detects the drag, automatically reverts it (so the file is restored to its original state), then applies the pre-computed Extract Method refactoring for the entire clone group simultaneously. The result is identical to the click-based apply above and is fully **undoable with Ctrl+Z**.
 
 > **If the drag does not trigger**, open **Output → Clone Visualizer — Drag Log** to see what was detected. The most common cause is that the file was not opened by clicking a blue leaf node first.
+
+---
+
+### 5 — Dropzone sidebar
+
+The **Dropzone** is a persistent snippet shelf in the VS Code sidebar. You can store any code snippet there and later drop it into any open editor.
+
+#### Adding snippets to the Dropzone
+
+| Method | How |
+|---|---|
+| Keyboard shortcut | Select text in any editor, then press `⌘⇧R` (Mac) / `Ctrl+Shift+R` (Windows/Linux) |
+| Command Palette | Select text, then run **Add to Dropzone** |
+| Drag into the panel | Drag a text selection directly onto the Dropzone tree view |
+
+#### Managing Dropzone items
+
+- **Right-click** a snippet to remove it via the context menu.
+- Select one or more items and run **Remove Selected** from the context menu.
+- Run **Clear Dropzone** to remove all stored snippets at once.
+
+#### Dropping a snippet into an editor
+
+Drag any Dropzone item and drop it onto an open editor file. Two behaviours apply depending on context:
+
+| Scenario | Behaviour |
+|---|---|
+| File was opened by clicking a **blue leaf node** in the clone tree | **Clone-aware drop** — a confirmation dialog offers to apply the pre-computed Extract Method refactoring for the entire clone group. All clone sites are updated simultaneously (undoable with Ctrl+Z). |
+| Any other file | **Generic drop** — a prompt asks for a method name. The snippet is wrapped in a language-appropriate function definition and inserted at the drop position. |
+
+#### Language-aware method wrapping (generic drop)
+
+When wrapping a snippet in the generic path, the extension generates idiomatic syntax for the target file's language:
+
+| Language | Generated signature |
+|---|---|
+| Python | `def methodName():` |
+| Java | `private void methodName()` |
+| TypeScript / JavaScript (and others) | `function methodName()` |
+
+The body is re-indented to match the drop position and the common leading whitespace is normalised automatically.
 
 ---
 
@@ -130,17 +171,30 @@ extension_clone_viz.ts      ─────────────────�
   • Opens editor tabs                                  • Color-coded nodes
   • Applies WorkspaceEdits
   • Listens for drag events
+  • Hosts Dropzone sidebar
 ```
 
 The extension host handles all filesystem access and VS Code API calls. The webview renders the tree and sends click events back via `postMessage`.
 
-### Drag detection
+### Dropzone sidebar
 
-VS Code fires `onDidChangeTextDocument` when the user drags text. The extension identifies a drag by looking for exactly two changes in one event: a deletion (the drag source) and an insertion (the drag destination) with identical content lengths. It then reconstructs the pre-drag document state and applies the structured refactoring on top.
+`DropzoneProvider` implements both `TreeDataProvider` and `TreeDragAndDropController`. It accepts drops from the editor (via a broad set of MIME types including `text/plain`, `text/uri-list`, and `downloadurl`) and exposes its stored items for dragging back into any editor.
+
+When a user drops a Dropzone item into an editor, `EditorDropProvider` (a `DocumentDropEditProvider` registered for all languages) intercepts the drop via the custom MIME type `application/vnd.drag.dropzone`. It then checks whether the document was opened from the clone tree (`lastOpenedByFile` map) and routes to the clone-aware or generic code path accordingly.
+
+### In-editor drag detection
+
+VS Code fires `onDidChangeTextDocument` when the user drags text. The extension identifies a drag by looking for exactly two changes in one event: a deletion (the drag source) and an insertion (the drag destination) with identical content lengths. It then reconstructs the pre-drag document state using `revertDrag` and applies the structured refactoring on top.
+
+Only **drag-down** operations (insertion offset > deletion end in original coordinates) are handled; drag-up is not supported.
+
+### Click-based apply (`runApplyExtractMethod`)
+
+When an orange clone-group node is clicked in the webview, the `applyExtractMethod` message is sent to the extension host. `runApplyExtractMethod` reads the pre-computed rewritten files from `media/refactor_out/`, applies them via `vscode.workspace.applyEdit` (so Ctrl+Z works), and opens each modified file in the editor for review.
 
 ### Undo support
 
-All edits — including the drag revert and the refactoring — are applied via `vscode.workspace.applyEdit(WorkspaceEdit)` rather than direct filesystem writes. This puts every change on VS Code's undo stack so Ctrl+Z always works.
+All edits — the drag revert, the click-based refactoring, and the drop-based refactoring — are applied via `vscode.workspace.applyEdit(WorkspaceEdit)` rather than direct filesystem writes. This puts every change on VS Code's undo stack so Ctrl+Z always works.
 
 ---
 
@@ -185,6 +239,9 @@ The extension reads `media/all_refactor_results.json`, a JSON array where each e
 |---|---|---|
 | White screen in the tree panel | JavaScript error in webview | Open **Developer: Open Webview Developer Tools → Console** |
 | "no rewritten files found" warning | `media/refactor_out/` folder missing or incomplete | Make sure the `media/refactor_out/` folder is present |
-| Drag does not trigger refactoring | File was not opened via a leaf click | Always click the blue leaf node first, then drag |
+| In-editor drag does not trigger refactoring | File was not opened via a leaf click | Always click the blue leaf node first, then drag |
+| Dropzone drop shows "could not read that drag" | MIME type not captured | Use `⌘⇧R` / `Ctrl+Shift+R` with a selection, or run **Add to Dropzone** from the Command Palette |
+| Dropzone drop does not apply clone refactoring | File was not opened via a leaf click | Click the blue leaf node first, then drag from the Dropzone |
+| Generic drop wraps code in wrong language syntax | Language ID mismatch | The extension uses the document's `languageId`; ensure the file has the correct language mode set in VS Code |
 | Changes are not reflected after editing source | Old compiled JS still running | Run `npm run compile`, then **Developer: Reload Window** in the host window |
 | Ctrl+Z does not undo | Same as above | Run `npm run compile`, then reload |
