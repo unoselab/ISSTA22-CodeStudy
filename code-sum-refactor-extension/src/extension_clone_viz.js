@@ -1,10 +1,4 @@
-/******/ (() => { // webpackBootstrap
-/******/ 	"use strict";
-/******/ 	var __webpack_modules__ = ([
-/* 0 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
+"use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -38,12 +32,13 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
+Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
-const vscode = __importStar(__webpack_require__(1));
-const fs = __importStar(__webpack_require__(2));
-const path = __importStar(__webpack_require__(3));
+const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const cp = __importStar(require("child_process"));
 // ── Constants ─────────────────────────────────────────────────────────────────
 // __dirname at runtime = <ext-root>/dist; one level up is the project root
 const EXT_ROOT = path.dirname(__dirname);
@@ -111,6 +106,76 @@ body) {
 function wholeDocRange(doc) {
     const last = doc.lineAt(doc.lineCount - 1);
     return new vscode.Range(0, 0, last.lineNumber, last.range.end.character);
+}
+function resolveSummarizerScript(extensionPath) {
+    const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
+    const override = (cfg.get('summarizerScriptPath') ?? '').trim();
+    if (override && fs.existsSync(override)) {
+        return override;
+    }
+    const bundled = path.join(extensionPath, 'scripts', 'summarizer.py');
+    if (fs.existsSync(bundled)) {
+        return bundled;
+    }
+    const sibling = path.join(extensionPath, '..', 'code-summarizer', 'summarizer.py');
+    if (fs.existsSync(sibling)) {
+        return sibling;
+    }
+    return undefined;
+}
+function resolvePythonExecutable(extensionPath) {
+    const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
+    const configured = (cfg.get('pythonPath') ?? '').trim();
+    if (configured) {
+        return configured;
+    }
+    const venvDir = path.join(extensionPath, '..', 'code-summarizer', '.venv');
+    const winPy = path.join(venvDir, 'Scripts', 'python.exe');
+    const unixPy = path.join(venvDir, 'bin', 'python');
+    if (fs.existsSync(winPy)) {
+        return winPy;
+    }
+    if (fs.existsSync(unixPy)) {
+        return unixPy;
+    }
+    return process.platform === 'win32' ? 'python' : 'python3';
+}
+/** Percent for display, e.g. 12.7 or 9.07 (trims trailing zeros). */
+function formatSummaryPercent(probability) {
+    const pct = probability * 100;
+    let s = pct.toFixed(2);
+    s = s.replace(/0+$/, '');
+    s = s.replace(/\.$/, '');
+    return s || '0';
+}
+function runSummarizeProcess(python, scriptPath, code) {
+    return new Promise((resolve, reject) => {
+        const proc = cp.spawn(python, [scriptPath, '--json', '--stdin'], {
+            windowsHide: true,
+        });
+        let out = '';
+        let err = '';
+        proc.stdout.setEncoding('utf8');
+        proc.stderr.setEncoding('utf8');
+        proc.stdout.on('data', (c) => { out += c; });
+        proc.stderr.on('data', (c) => { err += c; });
+        proc.on('error', e => reject(e));
+        proc.on('close', (exitCode, _sig) => {
+            if (exitCode !== 0) {
+                reject(new Error(err.trim() || `Summarizer exited with code ${exitCode}`));
+                return;
+            }
+            try {
+                const parsed = JSON.parse(out.trim());
+                resolve(parsed);
+            }
+            catch {
+                reject(new Error(out.trim() || err.trim() || 'Empty output from summarizer'));
+            }
+        });
+        proc.stdin.write(code, 'utf8');
+        proc.stdin.end();
+    });
 }
 // ── Apply pre-computed WorkspaceEdit ─────────────────────────────────────────
 async function applyPrecomputedRefactoring(doc, record) {
@@ -566,6 +631,59 @@ class EditorDropProvider {
 // ── Extension entry point ─────────────────────────────────────────────────────
 function activate(context) {
     console.log('Congratulations, your extension "clone-visualizer" is now active!');
+    const summaryChannel = vscode.window.createOutputChannel('Clone Visualizer — Code Summary');
+    context.subscriptions.push(summaryChannel);
+    const summarizeCmd = vscode.commands.registerCommand('clone-visualizer.summarizeSelection', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.selection.isEmpty) {
+            vscode.window.showWarningMessage('Select code in the editor to summarize.');
+            return;
+        }
+        const code = editor.document.getText(editor.selection);
+        if (!code.trim()) {
+            vscode.window.showWarningMessage('Selection is empty.');
+            return;
+        }
+        const scriptPath = resolveSummarizerScript(context.extensionPath);
+        if (!scriptPath) {
+            vscode.window.showErrorMessage('Clone Visualizer: summarizer.py not found. Expected scripts/summarizer.py in the extension folder.');
+            return;
+        }
+        const python = resolvePythonExecutable(context.extensionPath);
+        try {
+            const items = await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Summarizing code (local model)…',
+                cancellable: false,
+            }, () => runSummarizeProcess(python, scriptPath, code));
+            summaryChannel.clear();
+            items.forEach((it, i) => {
+                const pct = formatSummaryPercent(it.probability);
+                summaryChannel.appendLine(`${i + 1}. (${pct}%) ${it.summary}`);
+            });
+            summaryChannel.show(true);
+            const qpItems = items.map((it, i) => {
+                const pct = formatSummaryPercent(it.probability);
+                return {
+                    label: `${i + 1}. (${pct}%) ${it.summary}`,
+                    summary: it.summary,
+                };
+            });
+            const chosen = await vscode.window.showQuickPick(qpItems, {
+                placeHolder: 'Top summaries — Enter to copy, Esc to dismiss',
+                title: 'Code summaries',
+            });
+            if (chosen?.summary) {
+                await vscode.env.clipboard.writeText(chosen.summary);
+                vscode.window.showInformationMessage('Summary copied to clipboard.');
+            }
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            vscode.window.showErrorMessage(`Code summarization failed: ${msg}`);
+        }
+    });
+    context.subscriptions.push(summarizeCmd);
     // ── Dropzone sidebar setup ────────────────────────────────────────────────
     const dropzoneProvider = new DropzoneProvider();
     const treeView = vscode.window.createTreeView('dragDropZone', {
@@ -817,61 +935,4 @@ async function runApplyExtractMethod(classid, recordMap) {
     vscode.window.showInformationMessage(`✓ Extract method applied for ${classid}. Use Ctrl+Z to undo.`);
 }
 function deactivate() { }
-
-
-/***/ }),
-/* 1 */
-/***/ ((module) => {
-
-module.exports = require("vscode");
-
-/***/ }),
-/* 2 */
-/***/ ((module) => {
-
-module.exports = require("fs");
-
-/***/ }),
-/* 3 */
-/***/ ((module) => {
-
-module.exports = require("path");
-
-/***/ })
-/******/ 	]);
-/************************************************************************/
-/******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
-/******/ 	
-/******/ 	// The require function
-/******/ 	function __webpack_require__(moduleId) {
-/******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
-/******/ 		if (cachedModule !== undefined) {
-/******/ 			return cachedModule.exports;
-/******/ 		}
-/******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
-/******/ 			// no module.id needed
-/******/ 			// no module.loaded needed
-/******/ 			exports: {}
-/******/ 		};
-/******/ 	
-/******/ 		// Execute the module function
-/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
-/******/ 	
-/******/ 		// Return the exports of the module
-/******/ 		return module.exports;
-/******/ 	}
-/******/ 	
-/************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(0);
-/******/ 	module.exports = __webpack_exports__;
-/******/ 	
-/******/ })()
-;
 //# sourceMappingURL=extension_clone_viz.js.map
