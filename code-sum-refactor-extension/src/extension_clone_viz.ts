@@ -39,17 +39,18 @@ interface UpdatedFile {
     rewritten_file_path: string;
 }
 
+/** Loaded from JSON; optional fields are filled by {@link normalizeLoadedCloneRecord}. */
 interface CloneRecord {
     classid: string;
-    project: string;
-    inspection_case: string;
-    refactoring_type: string;
-    nclones: number;
-    same_file: number;
-    Refactorable: number;
+    project?: string;
+    inspection_case?: string;
+    refactoring_type?: string;
+    nclones?: number;
+    same_file?: number;
+    Refactorable?: number;
     sources: CloneSource[];
-    updated_files: UpdatedFile[];
-    extracted_method: ExtractedMethod;
+    updated_files?: UpdatedFile[];
+    extracted_method?: ExtractedMethod;
 }
 
 interface TreeNode {
@@ -64,13 +65,37 @@ interface TreeNode {
 
 // ── Parser / transformer ──────────────────────────────────────────────────────
 
+/** Infer NiCad-style project name from classid when `project` is omitted (e.g. Python JSON). */
+function inferProjectFromClassid(classid: string): string {
+    const head = classid.split('_vs_')[0] ?? classid;
+    return head.replace(/_\d+.*$/, '') || 'clones';
+}
+
+/** Fill defaults so Java, Python, and mixed precomputed JSON all work in the tree and maps. */
+function normalizeLoadedCloneRecord(r: CloneRecord): CloneRecord {
+    const sources = r.sources ?? [];
+    return {
+        ...r,
+        project: r.project ?? inferProjectFromClassid(r.classid),
+        inspection_case: r.inspection_case ?? '',
+        refactoring_type: r.refactoring_type ?? 'extract_method',
+        nclones: r.nclones ?? sources.length,
+        same_file: r.same_file ?? 0,
+        Refactorable: r.Refactorable ?? 1,
+        sources,
+        updated_files: r.updated_files ?? [],
+        extracted_method: r.extracted_method ?? { method_name: 'extracted', code: '' },
+    };
+}
+
 function parseCloneData(records: CloneRecord[]): TreeNode {
     const projectMap = new Map<string, Map<string, CloneRecord>>();
     for (const record of records) {
-        if (!projectMap.has(record.project)) {
-            projectMap.set(record.project, new Map());
+        const project = record.project ?? inferProjectFromClassid(record.classid);
+        if (!projectMap.has(project)) {
+            projectMap.set(project, new Map());
         }
-        projectMap.get(record.project)!.set(record.classid, record);
+        projectMap.get(project)!.set(record.classid, record);
     }
 
     const projectNodes: TreeNode[] = [];
@@ -85,7 +110,7 @@ function parseCloneData(records: CloneRecord[]): TreeNode {
                 parentClassid: classid,
             }));
             cloneNodes.push({
-                name: `${classid}  [${record.refactoring_type} · ${record.nclones} clones]`,
+                name: `${classid}  [${record.refactoring_type ?? 'extract_method'} · ${record.nclones ?? record.sources.length} clones]`,
                 classid,
                 children: sourceNodes,
             });
@@ -105,6 +130,61 @@ function resolvePath(relFile: string): string | undefined {
         ...folders.map(f => path.join(f.uri.fsPath, relFile)),
     ];
     return candidates.find(c => fs.existsSync(c));
+}
+
+/** Precomputed bundle: `media/all_refactor_results.json` or `all_refactor_results_py.json`, or an absolute path. */
+function resolveRefactorResultsDataPath(extensionPath: string): string {
+    const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
+    const override = (cfg.get<string>('refactorResultsPath') ?? '').trim();
+    if (override) {
+        if (path.isAbsolute(override) && fs.existsSync(override)) { return override; }
+        const inMedia = path.join(extensionPath, 'media', override);
+        if (fs.existsSync(inMedia)) { return inMedia; }
+        const inExt = path.join(extensionPath, override);
+        if (fs.existsSync(inExt)) { return inExt; }
+        void vscode.window.showWarningMessage(
+            `Clone Visualizer: refactorResultsPath not found (${override}). Using default bundle.`
+        );
+    }
+    return path.join(extensionPath, 'media', 'all_refactor_results.json');
+}
+
+type RefactorBundlePick = vscode.QuickPickItem & { fullPath: string };
+
+/** When no `refactorResultsPath` setting: pick dataset if both Java and Python bundles ship under media/. */
+async function chooseRefactorResultsJsonPath(extensionPath: string): Promise<string | undefined> {
+    const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
+    const override = (cfg.get<string>('refactorResultsPath') ?? '').trim();
+    if (override) {
+        return resolveRefactorResultsDataPath(extensionPath);
+    }
+    const media = path.join(extensionPath, 'media');
+    const javaPath = path.join(media, 'all_refactor_results.json');
+    const pyPath = path.join(media, 'all_refactor_results_py.json');
+    const hasJava = fs.existsSync(javaPath);
+    const hasPy = fs.existsSync(pyPath);
+    if (hasJava && hasPy) {
+        const chosen = await vscode.window.showQuickPick<RefactorBundlePick>(
+            [
+                { label: 'Java clones', description: path.basename(javaPath), fullPath: javaPath },
+                { label: 'Python clones', description: path.basename(pyPath), fullPath: pyPath },
+            ],
+            { placeHolder: 'Which clone dataset should the Code Clone Tree load?' }
+        );
+        return chosen?.fullPath;
+    }
+    if (hasPy) { return pyPath; }
+    if (hasJava) { return javaPath; }
+    return path.join(media, 'all_refactor_results.json');
+}
+
+/** Strip known prefixes from `updated_files[].rewritten_file_path` (Java uses data/…, Python export uses output/…). */
+function relativeUnderBundledRefactorOut(rewrittenFilePath: string): string {
+    const n = rewrittenFilePath.replace(/\\/g, '/');
+    for (const p of ['data/refactor_out/', 'output/refactor_out/', 'refactor_out/']) {
+        if (n.startsWith(p)) { return n.slice(p.length); }
+    }
+    return n;
 }
 
 // ── Drag helpers ──────────────────────────────────────────────────────────────
@@ -167,6 +247,59 @@ function resolvePythonExecutable(extensionPath: string): string {
     return process.platform === 'win32' ? 'python' : 'python3';
 }
 
+const HF_SUMMARY_JAVA = 'Dreamuno/llm_codeknowhow_v1';
+const HF_SUMMARY_PYTHON = 'Dreamuno/llm-codeknowhow-python';
+
+function isPythonDocument(doc: vscode.TextDocument): boolean {
+    return doc.languageId === 'python' || doc.fileName.toLowerCase().endsWith('.py');
+}
+
+type SummarizerRoute = 'java' | 'python';
+
+/**
+ * Python model if the buffer is Python or the selection looks like Python; otherwise Java model.
+ * (No manual pick — fully automatic.)
+ */
+function selectionLooksLikePython(code: string): boolean {
+    const s = code.trim();
+    if (s.length < 6) { return false; }
+    if (/\bfrom\s+[\w.]+\s+import\s+/.test(s)) { return true; }
+    if (/\bdef\s+[A-Za-z_]\w*\s*\(/.test(s)) { return true; }
+    if (/\basync\s+def\s+[A-Za-z_]\w*\s*\(/.test(s)) { return true; }
+    if (/\belif\b/.test(s)) { return true; }
+    if (/\bif\s+__name__\s*==\s*['"]__main__['"]/.test(s)) { return true; }
+    if (/\bexcept\s+[\w.]+\s+as\s+\w+/.test(s)) { return true; }
+    return false;
+}
+
+function resolveSummarizerRoute(doc: vscode.TextDocument, selectedCode: string): SummarizerRoute {
+    if (isPythonDocument(doc) || selectionLooksLikePython(selectedCode)) {
+        return 'python';
+    }
+    return 'java';
+}
+
+/** Hugging Face model id for the chosen route (both models are configured independently). */
+function resolveSummarizerModelId(doc: vscode.TextDocument, selectedCode: string, route?: SummarizerRoute): string {
+    const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
+    const pyModel = (cfg.get<string>('summarizerModelPython') ?? '').trim();
+    const javaModel =
+        (cfg.get<string>('summarizerModelJava') ?? '').trim() ||
+        (cfg.get<string>('summarizerModelDefault') ?? '').trim(); // legacy setting id
+    const r = route ?? resolveSummarizerRoute(doc, selectedCode);
+    if (r === 'python') {
+        return pyModel || HF_SUMMARY_PYTHON;
+    }
+    return javaModel || HF_SUMMARY_JAVA;
+}
+
+function summarizerProgressTitle(route: SummarizerRoute, modelId: string): string {
+    if (route === 'python') {
+        return `Summarizing Python (${modelId})…`;
+    }
+    return `Summarizing Java (${modelId})…`;
+}
+
 /** Percent for display, e.g. 12.7 or 9.07 (trims trailing zeros). */
 function formatSummaryPercent(probability: number): string {
     const pct = probability * 100;
@@ -176,9 +309,9 @@ function formatSummaryPercent(probability: number): string {
     return s || '0';
 }
 
-function runSummarizeProcess(python: string, scriptPath: string, code: string): Promise<SummaryItem[]> {
+function runSummarizeProcess(python: string, scriptPath: string, code: string, modelId: string): Promise<SummaryItem[]> {
     return new Promise((resolve, reject) => {
-        const proc = cp.spawn(python, [scriptPath, '--json', '--stdin'], {
+        const proc = cp.spawn(python, [scriptPath, '--json', '--stdin', '--model', modelId], {
             windowsHide: true,
         });
         let out = '';
@@ -206,6 +339,28 @@ function runSummarizeProcess(python: string, scriptPath: string, code: string): 
 }
 
 // ── Apply pre-computed WorkspaceEdit ─────────────────────────────────────────
+
+/** Re-indent a block (e.g. precomputed `def extracted...`) to `outerIndent` while keeping internal relative indents. */
+function reindentBlockPreservingRelativeStructure(code: string, outerIndent: string): string {
+    const lines = code.split('\n');
+    let minLead = Infinity;
+    for (const line of lines) {
+        if (!line.trim()) { continue; }
+        const m = /^(\s*)/.exec(line);
+        const n = m ? m[1].length : 0;
+        if (n < minLead) { minLead = n; }
+    }
+    if (minLead === Infinity) { minLead = 0; }
+    return lines
+        .map(line => {
+            if (!line.trim()) { return ''; }
+            const m = /^(\s*)/.exec(line)!;
+            const lead = m[1].length;
+            const rel = Math.max(0, lead - minLead);
+            return outerIndent + ' '.repeat(rel) + line.slice(lead);
+        })
+        .join('\n');
+}
 
 async function applyPrecomputedRefactoring(
     doc: vscode.TextDocument,
@@ -238,22 +393,30 @@ async function applyPrecomputedRefactoring(
         );
     }
 
-    // Insert extracted method after source[0]'s enclosing function closing brace
+    // Insert extracted method after source[0]'s enclosing function:
+    // Java: after closing `}` — use that line's indent (class member level).
+    // Python: after last body line — use the enclosing `def` line's indent so the new `def` is a sibling, not nested after `return`.
     const em  = record.extracted_method;
     const src0 = record.sources[0];
     if (em?.code && src0?.enclosing_function?.fun_range) {
         const fm = /^(\d+)-(\d+)$/.exec(src0.enclosing_function.fun_range.trim());
         if (fm) {
+            const encStart0 = parseInt(fm[1], 10) - 1;
             const encEnd0 = parseInt(fm[2], 10) - 1;
-            if (encEnd0 >= 0 && encEnd0 < doc.lineCount) {
-                const closingLine  = doc.lineAt(encEnd0).text;
-                const indentMatch  = /^(\s*)/.exec(closingLine);
-                const memberIndent = indentMatch ? indentMatch[1] : '    ';
+            if (encEnd0 >= 0 && encEnd0 < doc.lineCount && encStart0 >= 0 && encStart0 < doc.lineCount) {
+                const closingLine = doc.lineAt(encEnd0).text;
+                const defLine = doc.lineAt(encStart0).text;
+                const defIndentM = /^(\s*)/.exec(defLine);
+                const closingIndentM = /^(\s*)/.exec(closingLine);
+                const defLineIndent = defIndentM ? defIndentM[1] : '';
+                const closingLineIndent = closingIndentM ? closingIndentM[1] : '    ';
 
-                const methodCode = em.code
-                    .split('\n')
-                    .map(l => (l.trim() ? memberIndent + l : l))
-                    .join('\n');
+                const methodCode = isPythonDocument(doc)
+                    ? reindentBlockPreservingRelativeStructure(em.code, defLineIndent)
+                    : em.code
+                        .split('\n')
+                        .map(l => (l.trim() ? closingLineIndent + l : l))
+                        .join('\n');
 
                 edit.insert(
                     doc.uri,
@@ -667,18 +830,21 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
         const python = resolvePythonExecutable(context.extensionPath);
+        const route = resolveSummarizerRoute(editor.document, code);
+        const modelId = resolveSummarizerModelId(editor.document, code, route);
 
         try {
             const items = await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
-                    title: 'Summarizing code (local model)…',
+                    title: summarizerProgressTitle(route, modelId),
                     cancellable: false,
                 },
-                () => runSummarizeProcess(python, scriptPath, code)
+                () => runSummarizeProcess(python, scriptPath, code, modelId)
             );
 
             summaryChannel.clear();
+            summaryChannel.appendLine(`Route: ${route}  |  Model: ${modelId}`);
             items.forEach((it, i) => {
                 const pct = formatSummaryPercent(it.probability);
                 summaryChannel.appendLine(`${i + 1}. (${pct}%) ${it.summary}`);
@@ -702,7 +868,16 @@ export function activate(context: vscode.ExtensionContext) {
             }
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            vscode.window.showErrorMessage(`Code summarization failed: ${msg}`);
+            if (/protobuf/i.test(msg)) {
+                summaryChannel.appendLine(msg);
+                summaryChannel.show(true);
+                void vscode.window.showErrorMessage(
+                    'Code summarization failed: the Python env is missing protobuf (needed to load the model). ' +
+                    'Run: python3 -m pip install protobuf   — or: pip install -r scripts/requirements-summarizer.txt'
+                );
+            } else {
+                void vscode.window.showErrorMessage(`Code summarization failed: ${msg}`);
+            }
         }
     });
     context.subscriptions.push(summarizeCmd);
@@ -768,11 +943,22 @@ export function activate(context: vscode.ExtensionContext) {
     const log = vscode.window.createOutputChannel('Clone Visualizer — Drag Log');
     context.subscriptions.push(log);
 
-    let disposable = vscode.commands.registerCommand('clone-visualizer.show_code_clones', () => {
+    let disposable = vscode.commands.registerCommand('clone-visualizer.show_code_clones', async () => {
+
+        const dataPath = await chooseRefactorResultsJsonPath(context.extensionPath);
+        if (!dataPath) {
+            return;
+        }
+        if (!fs.existsSync(dataPath)) {
+            void vscode.window.showErrorMessage(`Clone Visualizer: clone data not found — ${dataPath}`);
+            return;
+        }
 
         // 1. Create the Webview Panel
+        const panelTitle =
+            path.basename(dataPath).includes('_py') ? 'Code Clone Tree (Python)' : 'Code Clone Tree';
         const panel = vscode.window.createWebviewPanel(
-            'cloneVisualizer', 'Code Clone Tree', vscode.ViewColumn.One,
+            'cloneVisualizer', panelTitle, vscode.ViewColumn.One,
             {
                 enableScripts: true,
                 localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, 'media'))]
@@ -788,9 +974,9 @@ export function activate(context: vscode.ExtensionContext) {
         htmlContent = htmlContent.replace('{{D3_URI}}', d3Uri.toString());
         panel.webview.html = htmlContent;
 
-        // 3. Parse all_refactor_results.json → D3 tree + populate shared lookup maps
-        const dataPath = path.join(context.extensionPath, 'media', 'all_refactor_results.json');
-        const records: CloneRecord[] = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        // 3. Parse refactor results JSON → D3 tree + populate shared lookup maps
+        const rawRecords = JSON.parse(fs.readFileSync(dataPath, 'utf8')) as CloneRecord[];
+        const records = rawRecords.map(normalizeLoadedCloneRecord);
         // Populate the shared recordMap in-place so EditorDropProvider always sees current data.
         recordMap.clear();
         for (const r of records) { recordMap.set(r.classid, r); }
@@ -953,10 +1139,10 @@ async function runApplyExtractMethod(
     const record = recordMap.get(classid);
     if (!record) { return; }
 
-    const filesToWrite = record.updated_files
+    const filesToWrite = (record.updated_files ?? [])
         .map(uf => ({
             src: (() => {
-                const rel = uf.rewritten_file_path.replace(/^data\/refactor_out\//, '');
+                const rel = relativeUnderBundledRefactorOut(uf.rewritten_file_path);
                 const abs = path.join(REFACTOR_OUT, rel);
                 return fs.existsSync(abs) ? abs : undefined;
             })(),
