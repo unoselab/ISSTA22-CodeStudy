@@ -25,27 +25,12 @@
         "cloneVisualizer.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Python executable used for code summarization. Use the same env where you installed scripts/requirements-summarizer.txt (protobuf, transformers, torch). Leave empty to use code-summarizer/.venv when present, otherwise python3 / python."
+          "description": "Path to the Python executable used for code summarization. Leave empty to use code-summarizer/.venv when present, otherwise python3 / python."
         },
         "cloneVisualizer.summarizerScriptPath": {
           "type": "string",
           "default": "",
           "description": "Optional absolute path to summarizer.py. When empty, the extension uses scripts/summarizer.py inside the extension, or ../code-summarizer/summarizer.py."
-        },
-        "cloneVisualizer.summarizerModelPython": {
-          "type": "string",
-          "default": "",
-          "description": "Hugging Face model id when summarization uses the Python path (.py / python language, or selection that looks like Python). Empty uses Dreamuno/llm-codeknowhow-python."
-        },
-        "cloneVisualizer.summarizerModelJava": {
-          "type": "string",
-          "default": "",
-          "description": "Hugging Face model id when not using the Python path (Java and all other languages). Empty uses Dreamuno/llm_codeknowhow_v1."
-        },
-        "cloneVisualizer.refactorResultsPath": {
-          "type": "string",
-          "default": "",
-          "description": "Clone / refactor dataset JSON (array of clone groups). Absolute path, or a file name under the extension media/ folder (e.g. all_refactor_results_py.json). When empty: if both Java and Python bundles exist under media/, Show Code Clones asks which to load; otherwise the single available bundle is used, else media/all_refactor_results.json."
         }
       }
     },
