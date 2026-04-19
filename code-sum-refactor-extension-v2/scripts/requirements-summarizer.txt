@@ -1,0 +1,7 @@
+# Local code summarization (Dreamuno models via Hugging Face).
+# Install into the same interpreter as "Clone Visualizer: Python Path", e.g.:
+#   python3 -m pip install -r scripts/requirements-summarizer.txt
+protobuf>=4.21.0
+transformers>=4.36.0
+torch>=2.0.0
+sentencepiece>=0.1.99
