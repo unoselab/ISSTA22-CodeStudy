@@ -45,7 +45,7 @@
   </head>
   <body>
     <div id="hint">
-      <span><span class="dot" style="background:#f5a623"></span>Clone group — click to apply extract method</span>
+      <span><span class="dot" style="background:#f5a623"></span>Clone group — click to expand · double-click to apply extract method</span>
       <span><span class="dot" style="background:#4a9eff"></span>Source clone — click to open file</span>
       <span><span class="dot" style="background:#44cc88"></span>Drag highlighted code here → wraps both clones</span>
     </div>
@@ -133,12 +133,19 @@
             .attr('fill-opacity', 0).attr('stroke-opacity', 0)
             .on('click', (event, d) => {
               if (d.data.file) {
+                // Leaf: open the source file
                 vscode.postMessage({ command: 'openFile', file: d.data.file, range: d.data.range, parentClassid: d.data.parentClassid });
-              } else if (d.data.classid) {
-                vscode.postMessage({ command: 'applyExtractMethod', classid: d.data.classid });
               } else {
+                // Non-leaf: toggle one level of children
                 d.children = d.children ? null : d._children;
                 update(d, 400);
+              }
+            })
+            .on('dblclick', (event, d) => {
+              // Double-click on a clone-group node applies extract method
+              if (d.data.classid) {
+                event.stopPropagation();
+                vscode.postMessage({ command: 'applyExtractMethod', classid: d.data.classid });
               }
             });
 
@@ -183,29 +190,12 @@
           root.eachBefore(d => { d.x0 = d.x; d.y0 = d.y; });
         }
 
-        // ── Auto-expand ───────────────────────────────────────────────────────
-        function collectNodesToExpand(node, arr = []) {
-          if (node._children) { arr.push(node); }
-          (node._children || node.children || []).forEach(c => collectNodesToExpand(c, arr));
-          return arr;
-        }
-        function autoExpandStepByStep() {
-          const toExpand = collectNodesToExpand(root).filter(d => d.depth >= 0);
-          let i = 0;
-          function expandNext() {
-            if (i >= toExpand.length) { svg.style('pointer-events', 'all'); return; }
-            const d = toExpand[i];
-            if (d._children) { d.children = d._children; }
-            update(d, 500);
-            i++;
-            setTimeout(expandNext, 600);
-          }
-          expandNext();
-        }
-
+        // Expand root once so top-level project nodes are immediately visible;
+        // all deeper levels stay collapsed until the user clicks to reveal them.
+        if (root._children) { root.children = root._children; }
         update(root, 0);
+        svg.style('pointer-events', 'all');
         d3.select('#chart').append(() => svg.node());
-        setTimeout(autoExpandStepByStep, 500);
 
         // ── External drag-and-drop: editor code → leaf node ───────────────────
         //

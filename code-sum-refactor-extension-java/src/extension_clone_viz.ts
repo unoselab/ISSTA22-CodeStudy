@@ -756,6 +756,8 @@ export function activate(context: vscode.ExtensionContext) {
     const lastOpenedByFile = new Map<string, string>();
     // key: classid → CloneRecord (loaded from all_refactor_results.json on panel open).
     const recordMap        = new Map<string, CloneRecord>();
+    // key: "absPath::range" → ViewColumn — each clone instance gets its own editor column.
+    const openCloneEditors = new Map<string, vscode.ViewColumn>();
 
     const editorDropProvider = vscode.languages.registerDocumentDropEditProvider(
         { language: '*' },
@@ -793,6 +795,7 @@ export function activate(context: vscode.ExtensionContext) {
         const records: CloneRecord[] = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
         // Populate the shared recordMap in-place so EditorDropProvider always sees current data.
         recordMap.clear();
+        openCloneEditors.clear();
         for (const r of records) { recordMap.set(r.classid, r); }
         const treeData = parseCloneData(records);
 
@@ -802,12 +805,15 @@ export function activate(context: vscode.ExtensionContext) {
         }, 500);
 
         // 5. Webview message handler (click interactions)
+        // Each leaf node (file + range) gets a dedicated editor column.
+        // openCloneEditors (keyed by "absPath::range") is the source of truth for which column
+        // belongs to which clone; a new leaf always picks the lowest unoccupied column >= 2.
         panel.webview.onDidReceiveMessage(
             async message => {
 
                 if (message.command === 'openFile') {
-                    const relFile: string     = message.file;
-                    const range: string       = message.range ?? '1-1';
+                    const relFile: string       = message.file;
+                    const range: string         = message.range ?? '1-1';
                     const parentClassid: string = message.parentClassid ?? '';
                     const resolved = resolvePath(relFile);
                     if (!resolved) {
@@ -824,11 +830,44 @@ export function activate(context: vscode.ExtensionContext) {
                     const startLine = Math.max(0, parseInt(range.split('-')[0], 10) - 1);
                     const endLine   = Math.max(startLine, parseInt(range.split('-')[1] ?? range.split('-')[0], 10) - 1);
                     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(resolved));
-                    await vscode.window.showTextDocument(doc, {
+
+                    // Each clone instance (file + range) gets its own dedicated editor column.
+                    const cloneKey   = `${resolved}::${range}`;
+                    const prevColumn = openCloneEditors.get(cloneKey);
+
+                    // Check if there is still a live editor for this clone in its assigned column.
+                    const prevEditor = prevColumn !== undefined
+                        ? vscode.window.visibleTextEditors.find(
+                            e => (e.viewColumn as number) === (prevColumn as number) &&
+                                 e.document.uri.fsPath === resolved)
+                        : undefined;
+
+                    let targetColumn: vscode.ViewColumn;
+                    if (prevEditor) {
+                        // Re-navigate to the column this clone already occupies.
+                        targetColumn = prevColumn!;
+                    } else {
+                        // Assign the lowest column (>= 2) not yet occupied by any tracked clone.
+                        // Collect columns that still have a visible editor (closed groups are freed).
+                        const liveColumns = new Set(
+                            [...openCloneEditors.values()].filter(col =>
+                                vscode.window.visibleTextEditors.some(
+                                    e => (e.viewColumn as number) === (col as number)))
+                        );
+                        let col = vscode.ViewColumn.Two as number;
+                        while (liveColumns.has(col as vscode.ViewColumn)) { col++; }
+                        targetColumn = col as vscode.ViewColumn;
+                    }
+
+                    const openedEditor = await vscode.window.showTextDocument(doc, {
                         selection: new vscode.Range(startLine, 0, endLine, Number.MAX_SAFE_INTEGER),
-                        viewColumn: vscode.ViewColumn.Beside,
+                        viewColumn: targetColumn,
                         preserveFocus: false,
                     });
+
+                    // Record the column VS Code actually used (fall back to what we requested
+                    // if viewColumn is undefined — avoids leaving this clone untracked).
+                    openCloneEditors.set(cloneKey, openedEditor.viewColumn ?? targetColumn);
                     return;
                 }
 

@@ -45,6 +45,8 @@ const vscode = __importStar(__webpack_require__(1));
 const fs = __importStar(__webpack_require__(2));
 const path = __importStar(__webpack_require__(3));
 const cp = __importStar(__webpack_require__(4));
+const http = __importStar(__webpack_require__(5));
+const https = __importStar(__webpack_require__(6));
 // ── Constants ─────────────────────────────────────────────────────────────────
 // __dirname at runtime = <ext-root>/dist; one level up is the project root
 const EXT_ROOT = path.dirname(__dirname);
@@ -192,6 +194,62 @@ function wholeDocRange(doc) {
     const last = doc.lineAt(doc.lineCount - 1);
     return new vscode.Range(0, 0, last.lineNumber, last.range.end.character);
 }
+function resolveRefactorScript(extensionPath) {
+    const bundled = path.join(extensionPath, 'scripts', 'extract_method_refactor_python.py');
+    if (fs.existsSync(bundled)) {
+        return bundled;
+    }
+    // Development layout: sibling directory
+    const sibling = path.join(extensionPath, '..', 'automate_extract_method_refactoring_py', 'extract_method_refactor_python.py');
+    if (fs.existsSync(sibling)) {
+        return sibling;
+    }
+    return undefined;
+}
+/**
+ * Call the tree-sitter refactor script in ``direct`` mode.
+ *
+ * The function body is piped via stdin; all other parameters are CLI flags.
+ * Returns the rewritten source string, or null on failure.
+ */
+function runTreeSitterDirect(python, scriptPath, absFilePath, signatureLine, body, callRanges, insertLine, replacementCodes) {
+    return new Promise((resolve, reject) => {
+        const args = [
+            scriptPath, 'direct',
+            '--file', absFilePath,
+            '--signature', signatureLine,
+            '--call-ranges', callRanges.join(','),
+            '--insert-line', String(insertLine),
+            '--replacement-codes', JSON.stringify(replacementCodes),
+        ];
+        const proc = cp.spawn(python, args, {
+            cwd: path.dirname(scriptPath), // sibling modules (python_treesitter_parser, util_ast_python) resolve from here
+            windowsHide: true,
+        });
+        let out = '';
+        let err = '';
+        proc.stdout.setEncoding('utf8');
+        proc.stderr.setEncoding('utf8');
+        proc.stdout.on('data', (c) => { out += c; });
+        proc.stderr.on('data', (c) => { err += c; });
+        proc.on('error', e => reject(e));
+        proc.on('close', (exitCode) => {
+            if (exitCode !== 0) {
+                reject(new Error(err.trim() || `Refactor script exited with code ${exitCode}`));
+                return;
+            }
+            try {
+                const result = JSON.parse(out.trim());
+                resolve(result.rewritten_source ?? null);
+            }
+            catch {
+                reject(new Error(`Invalid JSON from refactor script: ${out.trim().slice(0, 200)}`));
+            }
+        });
+        proc.stdin.write(body, 'utf8');
+        proc.stdin.end();
+    });
+}
 function resolveSummarizerScript(extensionPath) {
     const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
     const override = (cfg.get('summarizerScriptPath') ?? '').trim();
@@ -319,6 +377,107 @@ function runSummarizeProcess(python, scriptPath, code, modelId) {
         proc.stdin.write(code, 'utf8');
         proc.stdin.end();
     });
+}
+// ── REST client helpers ───────────────────────────────────────────────────────
+function resolveServerUrl() {
+    const cfg = vscode.workspace.getConfiguration('cloneVisualizer');
+    return (cfg.get('serverUrl') ?? 'http://127.0.0.1:5000').replace(/\/+$/, '');
+}
+/**
+ * Generic HTTP/HTTPS POST that sends JSON and resolves with the parsed response body.
+ * Rejects on network error, non-2xx status, or JSON parse failure.
+ */
+function httpPost(urlStr, body, timeoutMs = 30_000) {
+    return new Promise((resolve, reject) => {
+        let url;
+        try {
+            url = new URL(urlStr);
+        }
+        catch (e) {
+            reject(e);
+            return;
+        }
+        const payload = JSON.stringify(body);
+        const options = {
+            hostname: url.hostname,
+            port: url.port || (url.protocol === 'https:' ? 443 : 80),
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+            },
+            timeout: timeoutMs,
+        };
+        const lib = url.protocol === 'https:' ? https : http;
+        const req = lib.request(options, (res) => {
+            let data = '';
+            res.setEncoding('utf8');
+            res.on('data', (c) => { data += c; });
+            res.on('end', () => {
+                const status = res.statusCode ?? 0;
+                if (status < 200 || status >= 300) {
+                    reject(new Error(`HTTP ${status}: ${data.slice(0, 200)}`));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(data));
+                }
+                catch {
+                    reject(new Error(`Invalid JSON from server: ${data.slice(0, 200)}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+        req.write(payload);
+        req.end();
+    });
+}
+/** Returns true if the server is reachable (GET /health returns 200). */
+function checkServerHealth(baseUrl) {
+    return new Promise((resolve) => {
+        let url;
+        try {
+            url = new URL(baseUrl + '/health');
+        }
+        catch {
+            resolve(false);
+            return;
+        }
+        const lib = url.protocol === 'https:' ? https : http;
+        const options = {
+            hostname: url.hostname,
+            port: url.port || (url.protocol === 'https:' ? 443 : 80),
+            path: url.pathname,
+            method: 'GET',
+            timeout: 2_000,
+        };
+        const req = lib.request(options, (res) => {
+            res.resume();
+            resolve((res.statusCode ?? 0) === 200);
+        });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => { req.destroy(); resolve(false); });
+        req.end();
+    });
+}
+/** POST /summarize — sorted by probability descending. */
+async function apiSummarize(baseUrl, code, modelId) {
+    const results = await httpPost(baseUrl + '/summarize', { code, model: modelId }, 60_000);
+    return results.sort((a, b) => b.probability - a.probability);
+}
+/** POST /refactor/direct — returns the rewritten source, or null on failure. */
+async function apiRefactorDirect(baseUrl, absFilePath, signatureLine, body, callRanges, insertLine, replacementCodes) {
+    const resp = await httpPost(baseUrl + '/refactor/direct', {
+        file: absFilePath,
+        signature: signatureLine,
+        body,
+        call_ranges: callRanges,
+        insert_line: insertLine,
+        replacement_codes: replacementCodes,
+    }, 60_000);
+    return resp.rewritten_source ?? null;
 }
 // ── Apply pre-computed WorkspaceEdit ─────────────────────────────────────────
 /** Re-indent a block (e.g. precomputed `def extracted...`) to `outerIndent` while keeping internal relative indents. */
@@ -825,19 +984,28 @@ function activate(context) {
             return;
         }
         const scriptPath = resolveSummarizerScript(context.extensionPath);
-        if (!scriptPath) {
-            vscode.window.showErrorMessage('Clone Visualizer: summarizer.py not found. Expected scripts/summarizer.py in the extension folder.');
-            return;
-        }
         const python = resolvePythonExecutable(context.extensionPath);
         const route = resolveSummarizerRoute(editor.document, code);
         const modelId = resolveSummarizerModelId(editor.document, code, route);
+        const serverUrl = resolveServerUrl();
         try {
             const items = await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: summarizerProgressTitle(route, modelId),
                 cancellable: false,
-            }, () => runSummarizeProcess(python, scriptPath, code, modelId));
+            }, async () => {
+                const serverUp = await checkServerHealth(serverUrl);
+                if (serverUp) {
+                    log.appendLine(`[summarize] using server ${serverUrl}`);
+                    return apiSummarize(serverUrl, code, modelId);
+                }
+                if (!scriptPath) {
+                    throw new Error('Server is unreachable and summarizer.py not found. ' +
+                        'Start scripts/server.py or check scripts/summarizer.py.');
+                }
+                log.appendLine('[summarize] server unreachable — using subprocess');
+                return runSummarizeProcess(python, scriptPath, code, modelId);
+            });
             summaryChannel.clear();
             summaryChannel.appendLine(`Route: ${route}  |  Model: ${modelId}`);
             items.forEach((it, i) => {
@@ -925,6 +1093,8 @@ function activate(context) {
     const lastOpenedByFile = new Map();
     // key: classid → CloneRecord (loaded from all_refactor_results.json on panel open).
     const recordMap = new Map();
+    // key: "absPath::range" → ViewColumn — each clone instance gets its own editor column.
+    const openCloneEditors = new Map();
     const editorDropProvider = vscode.languages.registerDocumentDropEditProvider({ language: '*' }, new EditorDropProvider(lastOpenedByFile, recordMap));
     context.subscriptions.push(treeView, addSnippetCmd, removeSnippetCmd, removeSelectedCmd, clearDropzoneCmd, editorDropProvider);
     // ── End Dropzone setup ────────────────────────────────────────────────────
@@ -956,6 +1126,7 @@ function activate(context) {
         const records = rawRecords.map(normalizeLoadedCloneRecord);
         // Populate the shared recordMap in-place so EditorDropProvider always sees current data.
         recordMap.clear();
+        openCloneEditors.clear();
         for (const r of records) {
             recordMap.set(r.classid, r);
         }
@@ -965,6 +1136,9 @@ function activate(context) {
             panel.webview.postMessage({ command: 'loadData', data: treeData });
         }, 500);
         // 5. Webview message handler (click interactions)
+        // Each leaf node (file + range) gets a dedicated editor column.
+        // openCloneEditors (keyed by "absPath::range") is the source of truth for which column
+        // belongs to which clone; a new leaf always picks the lowest unoccupied column >= 2.
         panel.webview.onDidReceiveMessage(async (message) => {
             if (message.command === 'openFile') {
                 const relFile = message.file;
@@ -983,11 +1157,37 @@ function activate(context) {
                 const startLine = Math.max(0, parseInt(range.split('-')[0], 10) - 1);
                 const endLine = Math.max(startLine, parseInt(range.split('-')[1] ?? range.split('-')[0], 10) - 1);
                 const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(resolved));
-                await vscode.window.showTextDocument(doc, {
+                // Each clone instance (file + range) gets its own dedicated editor column.
+                const cloneKey = `${resolved}::${range}`;
+                const prevColumn = openCloneEditors.get(cloneKey);
+                // Check if there is still a live editor for this clone in its assigned column.
+                const prevEditor = prevColumn !== undefined
+                    ? vscode.window.visibleTextEditors.find(e => e.viewColumn === prevColumn &&
+                        e.document.uri.fsPath === resolved)
+                    : undefined;
+                let targetColumn;
+                if (prevEditor) {
+                    // Re-navigate to the column this clone already occupies.
+                    targetColumn = prevColumn;
+                }
+                else {
+                    // Assign the lowest column (>= 2) not yet occupied by any tracked clone.
+                    // Collect columns that still have a visible editor (closed groups are freed).
+                    const liveColumns = new Set([...openCloneEditors.values()].filter(col => vscode.window.visibleTextEditors.some(e => e.viewColumn === col)));
+                    let col = vscode.ViewColumn.Two;
+                    while (liveColumns.has(col)) {
+                        col++;
+                    }
+                    targetColumn = col;
+                }
+                const openedEditor = await vscode.window.showTextDocument(doc, {
                     selection: new vscode.Range(startLine, 0, endLine, Number.MAX_SAFE_INTEGER),
-                    viewColumn: vscode.ViewColumn.Beside,
+                    viewColumn: targetColumn,
                     preserveFocus: false,
                 });
+                // Record the column VS Code actually used (fall back to what we requested
+                // if viewColumn is undefined — avoids leaving this clone untracked).
+                openCloneEditors.set(cloneKey, openedEditor.viewColumn ?? targetColumn);
                 return;
             }
             if (message.command === 'applyExtractMethod') {
@@ -1070,11 +1270,65 @@ function activate(context) {
             if (!reverted) {
                 return;
             }
-            // Re-fetch the document (now in pre-drag state) and apply refactoring
+            // Re-fetch the document (now in pre-drag state) and apply refactoring.
+            // Prefer the tree-sitter dynamic path; fall back to pre-computed on failure.
             const freshDoc = await vscode.workspace.openTextDocument(doc.uri);
-            const applied = await applyPrecomputedRefactoring(freshDoc, matched);
+            const python = resolvePythonExecutable(context.extensionPath);
+            const scriptPath = resolveRefactorScript(context.extensionPath);
+            // 1-indexed drop line in the reverted (original) document.
+            // I is the character offset in the original document where the body was dropped.
+            const insertLine = freshDoc.positionAt(I).line + 1;
+            // Sources that belong to this file (the file being dragged in).
+            const fileSources = matched.sources.filter(s => {
+                const abs = resolvePath(s.file);
+                return abs === freshDoc.uri.fsPath;
+            });
+            const sources = fileSources.length > 0 ? fileSources : matched.sources;
+            // Signature = first line of the pre-computed extracted method code.
+            const signatureLine = (matched.extracted_method?.code ?? '').split('\n')[0].trim();
+            const serverUrl = resolveServerUrl();
+            const callRanges = sources.map(s => s.range);
+            const replacements = sources.map(s => s.replacement_code ?? '');
+            let applied = false;
+            if (signatureLine) {
+                // 1. Try REST server.
+                try {
+                    const serverUp = await checkServerHealth(serverUrl);
+                    if (serverUp) {
+                        log.appendLine(`[refactor] using server ${serverUrl}`);
+                        const rewritten = await apiRefactorDirect(serverUrl, freshDoc.uri.fsPath, signatureLine, body, callRanges, insertLine, replacements);
+                        if (rewritten !== null) {
+                            const tsEdit = new vscode.WorkspaceEdit();
+                            tsEdit.replace(freshDoc.uri, wholeDocRange(freshDoc), rewritten);
+                            applied = await vscode.workspace.applyEdit(tsEdit);
+                        }
+                    }
+                }
+                catch (err) {
+                    log.appendLine(`[refactor] server failed: ${String(err)} — trying subprocess`);
+                }
+                // 2. Fall back to local tree-sitter subprocess.
+                if (!applied && scriptPath) {
+                    try {
+                        log.appendLine('[refactor] using subprocess');
+                        const rewritten = await runTreeSitterDirect(python, scriptPath, freshDoc.uri.fsPath, signatureLine, body, callRanges, insertLine, replacements);
+                        if (rewritten !== null) {
+                            const tsEdit = new vscode.WorkspaceEdit();
+                            tsEdit.replace(freshDoc.uri, wholeDocRange(freshDoc), rewritten);
+                            applied = await vscode.workspace.applyEdit(tsEdit);
+                        }
+                    }
+                    catch (err) {
+                        log.appendLine(`[refactor] subprocess failed: ${String(err)} — falling back to pre-computed`);
+                    }
+                }
+            }
+            // 3. Final fallback: pre-computed refactoring from JSON data.
+            if (!applied) {
+                applied = await applyPrecomputedRefactoring(freshDoc, matched);
+            }
             if (applied) {
-                vscode.window.showInformationMessage(`Clone Visualizer: extract method applied for ${matched.classid} — ${matched.sources.length} clone site(s) updated.`);
+                vscode.window.showInformationMessage(`Clone Visualizer: extract method applied for ${matched.classid} — ${sources.length} clone site(s) updated.`);
             }
         });
         context.subscriptions.push(dragListener);
@@ -1160,6 +1414,18 @@ module.exports = require("path");
 /***/ ((module) => {
 
 module.exports = require("child_process");
+
+/***/ }),
+/* 5 */
+/***/ ((module) => {
+
+module.exports = require("http");
+
+/***/ }),
+/* 6 */
+/***/ ((module) => {
+
+module.exports = require("https");
 
 /***/ })
 /******/ 	]);
