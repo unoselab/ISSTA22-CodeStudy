@@ -46,6 +46,11 @@
           "type": "string",
           "default": "",
           "description": "Clone / refactor dataset JSON (array of clone groups). Absolute path, or a file name under the extension media/ folder (e.g. all_refactor_results_py.json). When empty: if both Java and Python bundles exist under media/, Show Code Clones asks which to load; otherwise the single available bundle is used, else media/all_refactor_results.json."
+        },
+        "cloneVisualizer.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:5000",
+          "description": "Base URL of the Clone Visualizer REST server (scripts/server.py). Used for code summarization (POST /summarize) and DnD refactoring (POST /refactor/direct). Falls back to local subprocess when the server is unreachable."
         }
       }
     },

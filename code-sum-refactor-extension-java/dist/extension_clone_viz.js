@@ -740,6 +740,8 @@ function activate(context) {
     const lastOpenedByFile = new Map();
     // key: classid → CloneRecord (loaded from all_refactor_results.json on panel open).
     const recordMap = new Map();
+    // key: "absPath::range" → ViewColumn — each clone instance gets its own editor column.
+    const openCloneEditors = new Map();
     const editorDropProvider = vscode.languages.registerDocumentDropEditProvider({ language: '*' }, new EditorDropProvider(lastOpenedByFile, recordMap));
     context.subscriptions.push(treeView, addSnippetCmd, removeSnippetCmd, removeSelectedCmd, clearDropzoneCmd, editorDropProvider);
     // ── End Dropzone setup ────────────────────────────────────────────────────
@@ -762,6 +764,7 @@ function activate(context) {
         const records = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
         // Populate the shared recordMap in-place so EditorDropProvider always sees current data.
         recordMap.clear();
+        openCloneEditors.clear();
         for (const r of records) {
             recordMap.set(r.classid, r);
         }
@@ -771,6 +774,9 @@ function activate(context) {
             panel.webview.postMessage({ command: 'loadData', data: treeData });
         }, 500);
         // 5. Webview message handler (click interactions)
+        // Each leaf node (file + range) gets a dedicated editor column.
+        // openCloneEditors (keyed by "absPath::range") is the source of truth for which column
+        // belongs to which clone; a new leaf always picks the lowest unoccupied column >= 2.
         panel.webview.onDidReceiveMessage(async (message) => {
             if (message.command === 'openFile') {
                 const relFile = message.file;
@@ -789,11 +795,37 @@ function activate(context) {
                 const startLine = Math.max(0, parseInt(range.split('-')[0], 10) - 1);
                 const endLine = Math.max(startLine, parseInt(range.split('-')[1] ?? range.split('-')[0], 10) - 1);
                 const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(resolved));
-                await vscode.window.showTextDocument(doc, {
+                // Each clone instance (file + range) gets its own dedicated editor column.
+                const cloneKey = `${resolved}::${range}`;
+                const prevColumn = openCloneEditors.get(cloneKey);
+                // Check if there is still a live editor for this clone in its assigned column.
+                const prevEditor = prevColumn !== undefined
+                    ? vscode.window.visibleTextEditors.find(e => e.viewColumn === prevColumn &&
+                        e.document.uri.fsPath === resolved)
+                    : undefined;
+                let targetColumn;
+                if (prevEditor) {
+                    // Re-navigate to the column this clone already occupies.
+                    targetColumn = prevColumn;
+                }
+                else {
+                    // Assign the lowest column (>= 2) not yet occupied by any tracked clone.
+                    // Collect columns that still have a visible editor (closed groups are freed).
+                    const liveColumns = new Set([...openCloneEditors.values()].filter(col => vscode.window.visibleTextEditors.some(e => e.viewColumn === col)));
+                    let col = vscode.ViewColumn.Two;
+                    while (liveColumns.has(col)) {
+                        col++;
+                    }
+                    targetColumn = col;
+                }
+                const openedEditor = await vscode.window.showTextDocument(doc, {
                     selection: new vscode.Range(startLine, 0, endLine, Number.MAX_SAFE_INTEGER),
-                    viewColumn: vscode.ViewColumn.Beside,
+                    viewColumn: targetColumn,
                     preserveFocus: false,
                 });
+                // Record the column VS Code actually used (fall back to what we requested
+                // if viewColumn is undefined — avoids leaving this clone untracked).
+                openCloneEditors.set(cloneKey, openedEditor.viewColumn ?? targetColumn);
                 return;
             }
             if (message.command === 'applyExtractMethod') {
